@@ -27,10 +27,7 @@ import tyro
 
 REPO_NAME = "your_hf_username/libero"  # Name of the output dataset, also used for the Hugging Face Hub
 RAW_DATASET_NAMES = [
-    "libero_10_no_noops",
-    "libero_goal_no_noops",
-    "libero_object_no_noops",
-    "libero_spatial_no_noops",
+    "",
 ]  # For simplicity we will combine multiple Libero datasets into one training dataset
 
 
@@ -50,12 +47,12 @@ def main(data_dir: str, *, push_to_hub: bool = False):
         features={
             "image": {
                 "dtype": "image",
-                "shape": (256, 256, 3),
+                "shape": (224, 24, 3),
                 "names": ["height", "width", "channel"],
             },
             "wrist_image": {
                 "dtype": "image",
-                "shape": (256, 256, 3),
+                "shape": (224, 224, 3),
                 "names": ["height", "width", "channel"],
             },
             "state": {
