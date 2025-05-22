@@ -64,12 +64,12 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                 "names": ["height", "width", "channel"],
             },
             "state": {
-                "dtype": "float64",
+                "dtype": "float32",
                 "shape": (7,),
                 "names": ["state"],
             },
             "actions": {
-                "dtype": "float64",
+                "dtype": "float32",
                 "shape": (7,),
                 "names": ["actions"],
             },
@@ -90,8 +90,8 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     {
                         "image": step["observation"]["image"],
                         "wrist_image": step["observation"]["wrist_image"],
-                        "state": step["observation"]["state"],
-                        "actions": step["action"],
+                        "state": step["observation"]["state"].astype("float32"),
+                        "actions": step["action"].astype("float32"),
                     }
                 )
                 frame_count += 1
