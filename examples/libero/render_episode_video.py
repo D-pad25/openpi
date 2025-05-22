@@ -9,6 +9,11 @@ FONT_SCALE = 0.5
 FONT_COLOR = (0, 255, 0)
 LINE_TYPE = 1
 
+def to_rgb_img(t):
+    arr = t.permute(1, 2, 0).cpu().numpy()
+    if arr.max() <= 1.0:  # assumes image is float [0,1]
+        arr = (arr * 255).clip(0, 255)
+    return np.ascontiguousarray(arr.astype(np.uint8))
 
 def overlay_text(frame, state, action):
     """Overlay state and action as text onto an image."""
@@ -30,9 +35,8 @@ def render_episode(repo_id: str, root: Path, episode_index: int = 0, out_path: P
     print(f"🎬 Rendering Episode {episode_index} with {to_idx - from_idx} frames")
 
     # Get the first frame to determine shape
-    first_frame = dataset[from_idx]
-    left = first_frame["image"].permute(1, 2, 0).numpy()
-    right = first_frame["wrist_image"].permute(1, 2, 0).numpy()
+    left = to_rgb_img(frame["image"])
+    right = to_rgb_img(frame["wrist_image"])
     height, width, _ = left.shape
     combined_width = width * 2
 
