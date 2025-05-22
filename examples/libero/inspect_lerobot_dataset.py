@@ -11,9 +11,11 @@ def inspect_lerobot_dataset(repo_id: str, root: Path = None):
     for i in range(dataset.num_episodes):
         try:
             episode = dataset[i]
-            task = dataset.task[i]
+            # task = dataset.task[i]
             print(f"\n🧪 Episode {i + 1}/{dataset.num_episodes}")
-            print(f"   📝 Task: {task}")
+            # print(f"   📝 Task: {task}")
+            print(f"   📝 Task index: {episode[0]['task_index']}")
+            print(f"   📝 Prompt: {dataset.tasks[int(episode[0]['task_index'])]}")
             print(f"   🔢 Steps: {len(episode)}")
             
             # Sample frame inspection
