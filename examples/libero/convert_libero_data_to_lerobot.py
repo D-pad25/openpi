@@ -25,9 +25,9 @@ from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 import tensorflow_datasets as tfds
 import tyro
 
-REPO_NAME = "your_hf_username/libero"  # Name of the output dataset, also used for the Hugging Face Hub
+REPO_NAME = "dpad25/agrivla_prune_tomatoes_v1"  # Name of the output dataset, also used for the Hugging Face Hub
 RAW_DATASET_NAMES = [
-    "",
+    "agrivla_dataset_v1"
 ]  # For simplicity we will combine multiple Libero datasets into one training dataset
 
 
@@ -42,12 +42,12 @@ def main(data_dir: str, *, push_to_hub: bool = False):
     # LeRobot assumes that dtype of image data is `image`
     dataset = LeRobotDataset.create(
         repo_id=REPO_NAME,
-        robot_type="panda",
+        robot_type="xarm6",
         fps=10,
         features={
             "image": {
                 "dtype": "image",
-                "shape": (224, 24, 3),
+                "shape": (224, 224, 3),
                 "names": ["height", "width", "channel"],
             },
             "wrist_image": {
@@ -89,10 +89,13 @@ def main(data_dir: str, *, push_to_hub: bool = False):
     # Consolidate the dataset, skip computing stats since we will do that later
     dataset.consolidate(run_compute_stats=False)
 
+    # Print the output path
+    print(f"Dataset saved to {output_path}")
+
     # Optionally push to the Hugging Face Hub
     if push_to_hub:
         dataset.push_to_hub(
-            tags=["libero", "panda", "rlds"],
+            tags=["libero", "xarm6", "rlds"],
             private=False,
             push_videos=True,
             license="apache-2.0",
