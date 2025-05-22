@@ -50,6 +50,7 @@ def main(data_dir: str, *, push_to_hub: bool = False):
     dataset = LeRobotDataset.create(
         repo_id=REPO_NAME,
         robot_type="xarm6",
+        root=OUTPUT_ROOT,
         fps=10,
         features={
             "image": {
