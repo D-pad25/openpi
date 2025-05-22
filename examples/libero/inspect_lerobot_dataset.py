@@ -11,7 +11,7 @@ def inspect_lerobot_dataset(repo_id: str, root: Path = None):
     for i in range(dataset.num_episodes):
         try:
             episode = dataset[i]
-            task = dataset.tasks[i]
+            task = dataset.task[i]
             print(f"\n🧪 Episode {i + 1}/{dataset.num_episodes}")
             print(f"   📝 Task: {task}")
             print(f"   🔢 Steps: {len(episode)}")
