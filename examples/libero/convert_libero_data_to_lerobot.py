@@ -56,12 +56,12 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                 "names": ["height", "width", "channel"],
             },
             "state": {
-                "dtype": "float32",
-                "shape": (8,),
+                "dtype": "float64",
+                "shape": (7,),
                 "names": ["state"],
             },
             "actions": {
-                "dtype": "float32",
+                "dtype": "float64",
                 "shape": (7,),
                 "names": ["actions"],
             },
