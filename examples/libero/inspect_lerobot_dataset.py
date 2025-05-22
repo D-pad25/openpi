@@ -6,8 +6,7 @@ from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 
 def inspect_lerobot_dataset(repo_id: str, root: Path = None):
     print(f"🔍 Loading dataset: {repo_id}")
-    dataset = LeRobotDataset(repo_id=repo_id, root=root)
-
+    dataset = LeRobotDataset(repo_id=repo_id, root=root, local_files_only=True)
     print(f"📁 Found {dataset.num_episodes} episodes in '{dataset.path}'")
     for i in range(dataset.num_episodes):
         try:
