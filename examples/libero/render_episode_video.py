@@ -9,7 +9,7 @@ FONT_SCALE = 0.5
 FONT_COLOR = (0, 255, 0)
 LINE_TYPE = 1
 
-def to_rgb_img(t: torch.Tensor) -> np.ndarray:
+def to_rgb_img(t) -> np.ndarray:
     """
     Converts a normalized (C, H, W) tensor image to a contiguous uint8 OpenCV-compatible RGB array.
     """
