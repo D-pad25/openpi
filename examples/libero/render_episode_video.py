@@ -37,6 +37,9 @@ def render_episode(repo_id: str, root: Path, episode_index: int = 0, out_path: P
     # Get the first frame to determine shape
     left = to_rgb_img(dataset[from_idx]["image"])
     right = to_rgb_img(dataset[from_idx]["wrist_image"])
+    img_tensor = dataset[from_idx]["image"]
+    print("Raw tensor stats:", img_tensor.shape, img_tensor.dtype)
+    print("Min:", img_tensor.min().item(), "Max:", img_tensor.max().item())
     height, width, _ = left.shape
     combined_width = width * 2
 
