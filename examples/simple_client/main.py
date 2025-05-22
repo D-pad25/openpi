@@ -40,7 +40,7 @@ def main(args: Args) -> None:
     )
     logging.info(f"Server metadata: {policy.get_server_metadata()}")
 
-    # Send 1 observation to make sure the model is loaded.
+    # Send 1 observation to make sure the model is loaded. 
     policy.infer(obs_fn())
 
     start = time.time()
