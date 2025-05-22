@@ -91,7 +91,7 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     }
                 )
                 frame_count += 1
-                print(f"  ✅ Saved episode {i + 1} with {frame_count} steps.")
+                print(f"  ✅ Saved episode {step + 1} with {frame_count} steps.")
             dataset.save_episode(task=step["language_instruction"].decode())
 
     # Consolidate the dataset, skip computing stats since we will do that later
