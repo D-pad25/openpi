@@ -45,8 +45,9 @@ def render_episode(repo_id: str, root: Path, episode_index: int = 0, out_path: P
 
     for idx in range(from_idx, to_idx):
         frame = dataset[idx]
-        left = frame["image"].permute(1, 2, 0).numpy().astype(np.uint8)
-        right = frame["wrist_image"].permute(1, 2, 0).numpy().astype(np.uint8)
+        left = np.ascontiguousarray(frame["image"].permute(1, 2, 0).cpu().numpy(), dtype=np.uint8)
+        right = np.ascontiguousarray(frame["wrist_image"].permute(1, 2, 0).cpu().numpy(), dtype=np.uint8)
+
 
         # Combine horizontally
         combined = np.concatenate((left, right), axis=1)
