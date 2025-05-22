@@ -80,7 +80,7 @@ def main(data_dir: str, *, push_to_hub: bool = False):
         raw_dataset = tfds.load(raw_dataset_name, data_dir=data_dir, split="train")
         for episode in raw_dataset:
             for step in episode["steps"].as_numpy_iterator():
-                print(f"  ✳️  Episode {i + 1}...")
+                print(f"  ✳️  Episode {step + 1}...")
                 frame_count = 0
                 dataset.add_frame(
                     {
