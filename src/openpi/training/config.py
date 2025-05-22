@@ -497,6 +497,8 @@ _CONFIGS = [
             # The repo_id is used to load the dataset.
             repo_id="dpad25/agrivla_prune_tomatoes_v1",
 
+            root=pathlib.Path("~/data/lerobot").expanduser(),
+
             # The base config is used to load the dataset
             base_config=DataConfig(
                 local_files_only=True,  # Set to True for local-only datasets.
