@@ -35,8 +35,8 @@ def render_episode(repo_id: str, root: Path, episode_index: int = 0, out_path: P
     print(f"🎬 Rendering Episode {episode_index} with {to_idx - from_idx} frames")
 
     # Get the first frame to determine shape
-    left = to_rgb_img(frame["image"])
-    right = to_rgb_img(frame["wrist_image"])
+    left = to_rgb_img(dataset[from_idx]["image"])
+    right = to_rgb_img(dataset[from_idx]["wrist_image"])
     height, width, _ = left.shape
     combined_width = width * 2
 
