@@ -36,6 +36,9 @@ def main(data_dir: str, *, push_to_hub: bool = False):
     output_path = LEROBOT_HOME / REPO_NAME
     if output_path.exists():
         shutil.rmtree(output_path)
+        print(f"🧹 Removed existing dataset at {output_path}")
+
+    print(f"🚀 Creating new LeRobot dataset at: {output_path}")
 
     # Create LeRobot dataset, define features to store
     # OpenPi assumes that proprio is stored in `state` and actions in `action`
@@ -73,9 +76,12 @@ def main(data_dir: str, *, push_to_hub: bool = False):
     # Loop over raw Libero datasets and write episodes to the LeRobot dataset
     # You can modify this for your own data format
     for raw_dataset_name in RAW_DATASET_NAMES:
+        print(f"📦 Loading TFDS dataset: {raw_dataset_name}")
         raw_dataset = tfds.load(raw_dataset_name, data_dir=data_dir, split="train")
         for episode in raw_dataset:
             for step in episode["steps"].as_numpy_iterator():
+                print(f"  ✳️  Episode {i + 1}...")
+                frame_count = 0
                 dataset.add_frame(
                     {
                         "image": step["observation"]["image"],
@@ -84,10 +90,14 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                         "actions": step["action"],
                     }
                 )
+                frame_count += 1
+                print(f"  ✅ Saved episode {i + 1} with {frame_count} steps.")
             dataset.save_episode(task=step["language_instruction"].decode())
 
     # Consolidate the dataset, skip computing stats since we will do that later
     dataset.consolidate(run_compute_stats=False)
+
+    print(f"✅ Dataset saved to: {output_path}")
 
     # Print the output path
     print(f"Dataset saved to {output_path}")
