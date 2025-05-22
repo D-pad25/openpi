@@ -37,20 +37,27 @@ RAW_DATASET_NAMES = [
 
 def main(data_dir: str, *, push_to_hub: bool = False):
     # Clean up any existing dataset in the output directory
-    output_path = OUTPUT_PATH
+    # output_path = OUTPUT_PATH
+    # if output_path.exists():
+    #     shutil.rmtree(output_path)
+    #     print(f"🧹 Removed existing dataset at {output_path}")
+
+    # print(f"🚀 Creating new LeRobot dataset at: {output_path}")
+
+    output_path = LEROBOT_HOME / REPO_NAME
     if output_path.exists():
         shutil.rmtree(output_path)
         print(f"🧹 Removed existing dataset at {output_path}")
-
+    
     print(f"🚀 Creating new LeRobot dataset at: {output_path}")
-
+    
     # Create LeRobot dataset, define features to store
     # OpenPi assumes that proprio is stored in `state` and actions in `action`
     # LeRobot assumes that dtype of image data is `image`
     dataset = LeRobotDataset.create(
         repo_id=REPO_NAME,
         robot_type="xarm6",
-        root=OUTPUT_ROOT,
+        # root=OUTPUT_ROOT,
         fps=10,
         features={
             "image": {
