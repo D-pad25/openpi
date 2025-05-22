@@ -9,11 +9,17 @@ FONT_SCALE = 0.5
 FONT_COLOR = (0, 255, 0)
 LINE_TYPE = 1
 
-def to_rgb_img(t):
-    arr = t.permute(1, 2, 0).cpu().numpy()
-    if arr.max() <= 1.0:  # assumes image is float [0,1]
-        arr = (arr * 255).clip(0, 255)
-    return np.ascontiguousarray(arr.astype(np.uint8))
+def to_rgb_img(t: torch.Tensor) -> np.ndarray:
+    """
+    Converts a normalized (C, H, W) tensor image to a contiguous uint8 OpenCV-compatible RGB array.
+    """
+    t = t.detach().cpu()
+    if t.ndim == 3 and t.shape[0] == 3:
+        t = t.permute(1, 2, 0)  # (C, H, W) → (H, W, C)
+    arr = t.numpy()
+    arr = (arr * 255).clip(0, 255).astype(np.uint8)
+    return np.ascontiguousarray(arr)
+
 
 def overlay_text(frame, state, action):
     """Overlay state and action as text onto an image."""
