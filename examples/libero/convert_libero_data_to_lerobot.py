@@ -26,7 +26,7 @@ from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 import tensorflow_datasets as tfds
 import tyro
 
-
+# Change this later
 REPO_NAME = "dpad25/agrivla_prune_tomatoes_v1"  # just a name  # Name of the output dataset, also used for the Hugging Face Hub
 OUTPUT_ROOT = Path("~/data/lerobot").expanduser()
 OUTPUT_PATH = OUTPUT_ROOT / REPO_NAME
