@@ -139,8 +139,6 @@ class ModelTransformFactory(GroupFactory):
 class DataConfigFactory(abc.ABC):
     # The LeRobot repo id.
     repo_id: str = tyro.MISSING
-    # root directory for the assets. This is used to load the assets from the Hugging Face Hub.
-    root: str | None = None
     # Determines how the assets will be loaded.
     assets: AssetsConfig = dataclasses.field(default_factory=AssetsConfig)
     # Base config that will be updated by the factory.
@@ -497,9 +495,8 @@ _CONFIGS = [
         model=pi0.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"),
         data=LeRobotxArm6DataConfig(
             # The repo_id is used to load the dataset.
-            repo_id="dpad25/agrivla_prune_tomatoes_v1",
-
-            root=pathlib.Path("~/data/lerobot").expanduser(),
+            # repo_id="dpad25/agrivla_prune_tomatoes_v1",
+            repo_id=str(pathlib.Path("~/data/lerobot").expanduser()),
 
             # The base config is used to load the dataset
             base_config=DataConfig(
