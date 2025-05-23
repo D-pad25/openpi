@@ -495,8 +495,8 @@ _CONFIGS = [
         model=pi0.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"),
         data=LeRobotxArm6DataConfig(
             # The repo_id is used to load the dataset.
-            # repo_id="dpad25/agrivla_prune_tomatoes_v1",
-            repo_id=str(pathlib.Path("~/data/lerobot").expanduser()),
+            repo_id="dpad25/agrivla_prune_tomatoes_v2",
+            # repo_id=str(pathlib.Path("~/data/lerobot").expanduser()),
 
             # The base config is used to load the dataset
             base_config=DataConfig(
