@@ -409,7 +409,7 @@ class TrainConfig:
     # -- see BaseModelConfig. Specific model implementations (e.g., Pi0Config) inherit from BaseModelConfig and may
     # define additional attributes.
     model: _model.BaseModelConfig = dataclasses.field(default_factory=pi0.Pi0Config)
-
+    # 53bb8df118fa851433e6cfa5d7a45a4144badcb6
     # A weight loader can optionally load (possibly partial) weights from disk after the model is initialized.
     weight_loader: weight_loaders.WeightLoader = dataclasses.field(default_factory=weight_loaders.NoOpWeightLoader)
 
