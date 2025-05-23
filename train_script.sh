@@ -11,9 +11,11 @@
 # ─── Activate your virtual environment ────────────────────────────────────
  source .venv/bin/activate
 
-# ─── Update enviroment path to cache direcotry  ────────────────────────────────────
+# ─── Update enviroment path to cache direcotry  ───────────────────────────
  export OPENPI_DATA_HOME=$HOME/.cache/openpi
 
+# ─── Log in to weights and biases to monitor progrss  ─────────────────────
+ wandb login
 # ─── Run your model using uv and config name ──────────────────────────────
  XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_xarm6_low_mem_finetune --exp-name=pi0_xarm6_lora_pickTomatoes_noFrozenFrames --overwrite
 
