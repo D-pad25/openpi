@@ -15,6 +15,7 @@ class EnvMode(enum.Enum):
     ALOHA_SIM = "aloha_sim"
     DROID = "droid"
     LIBERO = "libero"
+    XARM = "xarm"
 
 
 @dataclasses.dataclass
@@ -32,6 +33,7 @@ def main(args: Args) -> None:
         EnvMode.ALOHA_SIM: _random_observation_aloha,
         EnvMode.DROID: _random_observation_droid,
         EnvMode.LIBERO: _random_observation_libero,
+        EnvMode.XARM: _random_observation_xarm,
     }[args.env]
 
     policy = _websocket_client_policy.WebsocketClientPolicy(
@@ -83,6 +85,13 @@ def _random_observation_libero() -> dict:
         "prompt": "do something",
     }
 
+def _random_observation_xarm() -> dict:
+    return {
+        "state": np.random.rand(7),
+        "image": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
+        "wrist_image": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
+        "prompt": "do something",
+    }
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
