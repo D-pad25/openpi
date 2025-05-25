@@ -18,6 +18,7 @@ class EnvMode(enum.Enum):
     ALOHA_SIM = "aloha_sim"
     DROID = "droid"
     LIBERO = "libero"
+    XARM = "xarm"
 
 
 @dataclasses.dataclass
@@ -72,6 +73,10 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     EnvMode.LIBERO: Checkpoint(
         config="pi0_fast_libero",
         dir="s3://openpi-assets/checkpoints/pi0_fast_libero",
+    ),
+    EnvMode.XARM: Checkpoint(
+        config="pi0_xarm6_low_mem_finetune",
+        dir="checkpoints/pi0_xarm6_low_mem_finetune/pi0_xarm6_lora_pickTomatoes_noFrozenFrames/29999",
     ),
 }
 
