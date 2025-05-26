@@ -1,0 +1,68 @@
+# main.py
+
+import tyro
+import numpy as np
+from openpi_client import websocket_client_policy, image_tools
+from xarm_env import XArmRealEnv, MockXArmEnv
+from zmq_core.camera_node import ZMQClientCamera
+
+class MockCamera:
+    def read(self, img_size=None):
+        # Return fake RGB and depth images
+        rgb = np.random.randint(0, 256, size=(480, 640, 3), dtype=np.uint8)
+        depth = np.random.randint(0, 65536, size=(480, 640), dtype=np.uint16)
+        return rgb, depth
+    
+def main(
+    remote_host: str = "localhost",
+    remote_port: int = 8000,
+    wrist_camera_port: int = 5000,
+    base_camera_port: int = 5001,
+    max_steps: int = 100,
+    prompt: str = "Pick a ripe, red tomato and drop it in the blue bucket.",
+    mock: bool = True,
+):
+    # Create camera clients
+    camera_clients = {}
+
+    # Initialize camera clients
+    if mock:
+        camera_clients = {
+            "wrist": MockCamera(),
+            "base": MockCamera(),
+        }
+        env = MockXArmEnv(camera_dict=camera_clients)
+    else:
+        camera_clients = {
+            "wrist": ZMQClientCamera(port=wrist_camera_port, host=remote_host),
+            "base": ZMQClientCamera(port=base_camera_port, host=remote_host),
+        }
+        env = XArmRealEnv(camera_dict=camera_clients)
+
+    # Connect to the policy server
+    policy_client = websocket_client_policy.WebsocketClientPolicy(
+        host=remote_host,
+        port=remote_port,
+    )
+
+    for _ in range(max_steps):
+        obs = env.get_observation()
+
+        base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
+        wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
+
+        observation = {
+            "state": np.concatenate([obs["joint_position"][:6], obs["gripper_position"]]),
+            "image": base_rgb,
+            "wrist_image": wrist_rgb,
+            "prompt": prompt,
+        }
+
+        action_chunk = policy_client.infer(observation)["actions"]
+
+        for action in action_chunk:
+            env.step(np.array(action))
+
+
+if __name__ == "__main__":
+    tyro.cli(main)
