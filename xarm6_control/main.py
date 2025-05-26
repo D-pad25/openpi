@@ -58,7 +58,7 @@ def main(
         wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
 
         observation = {
-            "state": np.concatenate([obs["joint_position"][:6], obs["gripper_position"]]),
+            "state": np.concatenate([obs["joint_position"], obs["gripper_position"]]),
             "image": base_rgb,
             "wrist_image": wrist_rgb,
             "prompt": prompt,
@@ -68,7 +68,7 @@ def main(
 
         for i, action in enumerate(action_chunk):
             if step_through_instructions:
-                current_joints_rad = env.get_observation()["joint_position"]
+                current_joints_rad = obs["joint_position"]
                 current_joints_deg = np.degrees(current_joints_rad)
                 action_joints_rad = np.array(action[:6])
                 action_joints_deg = np.degrees(action_joints_rad)
@@ -78,7 +78,7 @@ def main(
                 print("Current Joint State (deg):", np.round(current_joints_deg[:6], 2))
                 print("Proposed Action (deg):     ", np.round(action_joints_deg, 2))
                 print("Delta (deg):               ", np.round(delta_deg, 2))
-                print(f"Gripper: {action[-1]:.3f}")
+                print(f"Gripper pose: {obs['gripper_position']}, Gripper action: {action[-1]:.3f}")
 
 
                 if np.any(np.abs(delta_deg) > delta_threshold):
