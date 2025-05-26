@@ -115,16 +115,16 @@ class XArmRealEnv:
         for i, interpolated_action in enumerate(trajectory):
             start_time = time.time()
 
-            current_deg = np.degrees(obs["joint_position"][:6])
-            proposed_deg = np.degrees(interpolated_action[:6])
-            delta_deg = proposed_deg - current_deg
-            gripper = interpolated_action[-1]
+            # current_deg = np.degrees(obs["joint_position"][:6])
+            # proposed_deg = np.degrees(interpolated_action[:6])
+            # delta_deg = proposed_deg - current_deg
+            # gripper = interpolated_action[-1]
 
-            print(f"\n→ INTERPOLATION STEP {i+1}:")
-            print("  Current (deg): ", np.round(current_deg, 2))
-            print("  Proposed (deg):", np.round(proposed_deg, 2))
-            print("  Δ Delta (deg): ", np.round(delta_deg, 2))
-            print(f"  Gripper pose: {obs['gripper_position']}, Gripper action: {gripper:.3f}")
+            # print(f"\n→ INTERPOLATION STEP {i+1}:")
+            # print("  Current (deg): ", np.round(current_deg, 2))
+            # print("  Proposed (deg):", np.round(proposed_deg, 2))
+            # print("  Δ Delta (deg): ", np.round(delta_deg, 2))
+            # print(f"  Gripper pose: {obs['gripper_position']}, Gripper action: {gripper:.3f}")
 
             cmd = input("Press [Enter] to execute, 's' to skip, or 'q' to quit: ").strip().lower()
             if cmd == "q":
