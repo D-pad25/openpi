@@ -36,12 +36,13 @@ class XArmRealEnv:
 
     def get_observation(self):
         joint_position = self._get_joint_position()
-        gripper_pos = self._get_gripper_position()
+        # gripper_pos = self._get_gripper_position()
         gripper_pos = (gripper_pos - 800) / (0 - 800)  # Normalize to [0, 1]
 
         obs = {
             "joint_position": np.array(joint_position[:6]),  # Keep only 6 joints
-            "gripper_position": np.array([gripper_pos]),
+            # "gripper_position": np.array([gripper_pos]),
+            "gripper_position": 0,  # Use a placeholder for gripper position
         }
 
          # Build state with 6 joints + 1 gripper
@@ -60,9 +61,9 @@ class XArmRealEnv:
         joint_action = np.clip(action[:6], -1, 1)
         gripper_action = np.clip(action[-1], 0, 1)
 
-        self.arm.set_servo_angle_j(joint_action, is_radian=True, wait=False)
-        gripper_mm = 800 + gripper_action * (0 - 800)
-        self.arm.set_gripper_position(gripper_mm, wait=False)
+        # self.arm.set_servo_angle_j(joint_action, is_radian=True, wait=False)
+        # gripper_mm = 800 + gripper_action * (0 - 800)
+        # self.arm.set_gripper_position(gripper_mm, wait=False)
 
 # mock_xarm_env.py
 
