@@ -63,7 +63,7 @@ class XArmRealEnv:
 
     import numpy as np
 
-    def generate_joint_trajectory(current_angles, target_angles, max_delta):
+    def generate_joint_trajectory(self, current_angles, target_angles, max_delta):
         current_angles = np.array(current_angles)
         target_angles = np.array(target_angles)
         
