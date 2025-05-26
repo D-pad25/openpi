@@ -26,7 +26,7 @@ def main(
     control_hz: float = 30.0,  # ← New parameter: control frequency in Hz
     step_through_instructions: bool = False,  # New argument
     delta_threshold: float = 0.25,  # New argument for delta threshold
-    log_dir: str = "/media/acrv/DanielsSSD/VLA_data/Run1"
+    log_dir: str = "/media/acrv/DanielsSSD/VLA_data/Run2"
 ):
     # Create camera clients
     camera_clients = {}
@@ -114,16 +114,16 @@ def main(
 
             # This line runs ONLY if user pressed [Enter]
             print("✅ Executing action...")
-            # obs_to_save = copy.deepcopy(obs)
-            # env.save_step_data(log_dir, step_idx, obs_to_save, action)
+            obs_to_save = copy.deepcopy(obs)
+            env.save_step_data(log_dir, step_idx, obs_to_save, action)
             env.step(np.array(action))
             elapsed = time.time() - start_time
             time.sleep(max(0.0, (1.0 / control_hz) - elapsed))
 
         # Execute action
         if not step_through_instructions and np.any(np.abs(delta_deg) < delta_threshold):
-            # obs_to_save = copy.deepcopy(obs)
-            # env.save_step_data(log_dir, step_idx, obs_to_save, action)
+            obs_to_save = copy.deepcopy(obs)
+            env.save_step_data(log_dir, step_idx, obs_to_save, action)
             env.step(np.array(action))
 
 
