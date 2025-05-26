@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from cameras.camera import CameraDriver
+from camera import CameraDriver
 
 
 def get_device_ids() -> List[str]:
