@@ -22,6 +22,7 @@ def launch_server(port: int, camera_id: int, args: Args):
 
 def main(args):
     ids = get_device_ids()
+    print(f"Found RealSense devices: {ids}")
     camera_port = 5000
     camera_servers = []
     for camera_id in ids:
