@@ -20,7 +20,7 @@ def main(
     remote_port: int = 8000,
     wrist_camera_port: int = 5000,
     base_camera_port: int = 5001,
-    max_steps: int = 2000,
+    max_steps: int = 5000,
     prompt: str = "Pick a ripe, red tomato and drop it in the blue bucket.",
     mock: bool = False,
     control_hz: float = 5.0,  # ← New parameter: control frequency in Hz
@@ -56,10 +56,10 @@ def main(
 
     for step_idx in range(max_steps):
         start_time = time.time()
-
+        obs = env.get_observation()
         # Get new action_chunk if empty or 25 steps have passed
         if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= 25:
-            obs = env.get_observation()
+            # obs = env.get_observation()
 
             base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
             wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
