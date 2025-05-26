@@ -136,7 +136,7 @@ def main(
 
                     for i, interpolated_action in enumerate(interpolated_trajectory):
                         # Print proposed interpolated action
-                        print(f" → Step {i+1}: {np.round(np.degrees(interpolated_action[:6]), 2)} deg | Gripper: {interpolated_action[-1]:.3f}")
+                        print(f"\n→ INTERPOLATOIN STEP {i+1}: {np.round(np.degrees(interpolated_action[:6]), 2)} deg | Gripper: {interpolated_action[-1]:.3f}")
 
                         # Show current joint state and delta
                         current_joints_deg = np.degrees(obs["joint_position"][:6])
