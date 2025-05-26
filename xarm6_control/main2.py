@@ -56,9 +56,10 @@ def main(
 
     for step_idx in range(max_steps):
         start_time = time.time()
-        obs = env.get_observation()
+        obs = env.get_observation(frame_requested=False)
         # Get new action_chunk if empty or 25 steps have passed
         if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= 25:
+            obs = env.get_observation(frame_requested=True)
             # pad images as per policy requirements
             base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
             wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)

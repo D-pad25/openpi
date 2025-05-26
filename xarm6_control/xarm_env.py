@@ -43,7 +43,7 @@ class XArmRealEnv:
             code, gripper_pos = self.arm.get_gripper_position()
         return gripper_pos
 
-    def get_observation(self):
+    def get_observation(self, frame_requested):
         joint_position = self._get_joint_position()
         # gripper_pos = self._get_gripper_position()
         # gripper_pos = (gripper_pos - 800) / (0 - 800)  # Normalize to [0, 1]
@@ -58,10 +58,11 @@ class XArmRealEnv:
         obs["state"] = np.concatenate([obs["joint_position"], obs["gripper_position"]])
 
         # Include camera observations if available
-        for name, camera in self.camera_dict.items():
-            image, depth = camera.read()
-            obs[f"{name}_rgb"] = image
-            obs[f"{name}_depth"] = depth
+        if frame_requested:
+            for name, camera in self.camera_dict.items():
+                image, depth = camera.read()
+                obs[f"{name}_rgb"] = image
+                obs[f"{name}_depth"] = depth
 
         return obs
     
@@ -145,7 +146,7 @@ class XArmRealEnv:
             elapsed = time.time() - start_time
             time.sleep(max(0.0, (1.0 / control_hz) - elapsed))
 
-            obs = self.get_observation()
+            obs = self.get_observation(frame_requested=False)
         return obs
 
     def save_step_data(self, log_dir, step_idx, obs, action):
