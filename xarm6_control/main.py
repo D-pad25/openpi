@@ -128,7 +128,7 @@ def main(
                 print(f"[INFO] Large delta detected (>{delta_threshold} deg). Generating interpolated steps...")
 
                 interpolated_trajectory = env.generate_joint_trajectory(
-                    current_joints_rad, action_joints_rad, max_delta=(delta_threshold * np.pi / 180.0)
+                    current_joints_rad, action_joints_rad, delta_threshold * np.pi / 180.0
                 )
 
                 if interpolated_trajectory:
