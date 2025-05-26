@@ -37,7 +37,7 @@ class XArmRealEnv:
     def get_observation(self):
         joint_position = self._get_joint_position()
         # gripper_pos = self._get_gripper_position()
-        gripper_pos = (gripper_pos - 800) / (0 - 800)  # Normalize to [0, 1]
+        # gripper_pos = (gripper_pos - 800) / (0 - 800)  # Normalize to [0, 1]
 
         obs = {
             "joint_position": np.array(joint_position[:6]),  # Keep only 6 joints
