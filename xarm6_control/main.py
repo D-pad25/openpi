@@ -169,7 +169,7 @@ def main(
                 continue
 
             # This line runs ONLY if user pressed [Enter]
-            
+            print("✅ Executing action...")
             env.step(np.array(action))
 
         if not step_through_instructions and np.any(np.abs(delta_deg) > delta_threshold):
