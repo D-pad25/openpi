@@ -21,7 +21,7 @@ def main(
     base_camera_port: int = 5001,
     max_steps: int = 100,
     prompt: str = "Pick a ripe, red tomato and drop it in the blue bucket.",
-    mock: bool = True,
+    mock: bool = False,
     control_hz: float = 50.0,  # ← New parameter: control frequency in Hz
     step_through_instructions: bool = True,  # New argument
     delta_threshold: float = 5.0,  # New argument for delta threshold
@@ -108,7 +108,7 @@ def main(
             continue  # Skip executing this action
 
         # Execute action
-        env.step(np.array(action))
+        # env.step(np.array(action))
 
         # Update state after step
         obs["joint_position"] = action_joints_rad
