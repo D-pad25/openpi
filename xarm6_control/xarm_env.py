@@ -3,6 +3,11 @@
 import numpy as np
 from xarm.wrapper import XArmAPI
 
+JOINT_LIMITS = {
+    "lower": np.radians([-360, -118, -225, -360,  97, -360]),
+    "upper": np.radians([ 360,  120,   11,  360, 180,  360])
+}
+
 
 class XArmRealEnv:
     def __init__(self, ip="192.168.1.203", camera_dict=None):
@@ -57,11 +62,12 @@ class XArmRealEnv:
         return obs
 
     def step(self, action: np.ndarray):
-        # xArm6 has 6 joints, so slice first 6
-        joint_action = np.clip(action[:6], -1, 1)
+        # Clip joint angles to physical joint limits
+        joint_action = np.clip(action[:6], JOINT_LIMITS["lower"], JOINT_LIMITS["upper"])
         gripper_action = np.clip(action[-1], 0, 1)
 
-        self.arm.set_servo_angle_j(joint_action, is_radian=True, wait=False)
+        print(f"[STEP] Joint action: {joint_action}, Gripper action: {gripper_action}")
+        # self.arm.set_servo_angle_j(joint_action, is_radian=True, wait=False)
         # gripper_mm = 800 + gripper_action * (0 - 800)
         # self.arm.set_gripper_position(gripper_mm, wait=False)
 
