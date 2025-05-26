@@ -5,7 +5,7 @@ from xarm.wrapper import XArmAPI
 
 
 class XArmRealEnv:
-    def __init__(self, ip="192.168.1.226", camera_dict=None):
+    def __init__(self, ip="192.168.1.203", camera_dict=None):
         self.arm = XArmAPI(ip, is_radian=True)
         self._initialize_arm()
         self.camera_dict = camera_dict or {}
