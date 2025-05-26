@@ -24,7 +24,7 @@ def main(
     prompt: str = "Pick a ripe, red tomato and drop it in the blue bucket.",
     mock: bool = False,
     control_hz: float = 30.0,  # ← New parameter: control frequency in Hz
-    step_through_instructions: bool = True,  # New argument
+    step_through_instructions: bool = False,  # New argument
     delta_threshold: float = 0.25,  # New argument for delta threshold
     log_dir: str = "/media/acrv/DanielsSSD/VLA_data/Run"
 ):
@@ -120,6 +120,13 @@ def main(
             elapsed = time.time() - start_time
             time.sleep(max(0.0, (1.0 / control_hz) - elapsed))
 
+        # Execute action
+        if not step_through_instructions and np.any(np.abs(delta_deg) < delta_threshold):
+            obs_to_save = copy.deepcopy(obs)
+            env.save_step_data(log_dir, step_idx, obs_to_save, action)
+            env.step(np.array(action))
+
+
         if not step_through_instructions and np.any(np.abs(delta_deg) > delta_threshold):
             print(f"[INFO] Large delta detected (>{delta_threshold} deg). Requesting new action chunk.")
             # Convert current and action joints to radians for interpolation
@@ -128,12 +135,6 @@ def main(
             interpolated_trajectory = env.generate_joint_trajectory(state, action, delta_threshold * np.pi / 180.0)
             obs = env.step_through_interpolated_trajectory(interpolated_trajectory, obs, step_idx, log_dir, control_hz)
             continue
-
-        # Execute action
-        if not step_through_instructions:
-            obs_to_save = copy.deepcopy(obs)
-            env.save_step_data(log_dir, step_idx, obs_to_save, action)
-            env.step(np.array(action))
 
         if not step_through_instructions:
             elapsed = time.time() - start_time
