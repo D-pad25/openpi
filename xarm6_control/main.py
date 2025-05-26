@@ -24,7 +24,7 @@ def main(
     mock: bool = False,
     control_hz: float = 5.0,  # ← New parameter: control frequency in Hz
     step_through_instructions: bool = True,  # New argument
-    delta_threshold: float = 0.5,  # New argument for delta threshold
+    delta_threshold: float = 0.25,  # New argument for delta threshold
 ):
     # Create camera clients
     camera_clients = {}
@@ -158,16 +158,18 @@ def main(
                             continue
 
                         # Execute step
+                        print("✅ Executing safe action...")
                         # env.step(np.array(interpolated_action))
                         obs["joint_position"] = interpolated_action[:6]
                         obs["gripper_position"] = np.array([interpolated_action[-1]])
+                    continue
 
                 else:
                     print("[WARN] No interpolated steps produced.")
                 continue
 
             # This line runs ONLY if user pressed [Enter]
-            print("✅ Executing safe action...")
+            
             env.step(np.array(action))
 
         if not step_through_instructions and np.any(np.abs(delta_deg) > delta_threshold):
