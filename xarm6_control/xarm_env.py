@@ -153,7 +153,6 @@ class XArmRealEnv:
         os.makedirs(log_dir, exist_ok=True)
 
         data = {
-            "step_idx": step_idx,
             "timestamp": time.time(),
             "base_rgb": obs["base_rgb"],
             "wrist_rgb": obs["wrist_rgb"],
@@ -161,8 +160,8 @@ class XArmRealEnv:
             "gripper_position": obs["gripper_position"],
             "action": action,
         }
-
-        file_path = os.path.join(log_dir, f"{step_idx:05d}.pkl")
+        file_name = f"{data['timestamp']:.6f}.pkl"
+        file_path = os.path.join(log_dir, file_name)
         with open(file_path, "wb") as f:
             pickle.dump(data, f)
 
