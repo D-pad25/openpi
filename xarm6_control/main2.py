@@ -108,7 +108,7 @@ def main(
                 state = np.concatenate([obs["joint_position"], obs["gripper_position"]])
                 # Interpolate trajectory if delta exceeds threshold
                 interpolated_trajectory = env.generate_joint_trajectory(state, action, delta_threshold * np.pi / 180.0)
-                obs = env.step_through_interpolated_trajectory(interpolated_trajectory, obs, step_idx, log_dir, control_hz)
+                obs = env.step_through_interpolated_trajectory(interpolated_trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions)
                 continue
 
 
@@ -133,7 +133,7 @@ def main(
             state = np.concatenate([obs["joint_position"], obs["gripper_position"]])
             # Interpolate trajectory if delta exceeds threshold
             interpolated_trajectory = env.generate_joint_trajectory(state, action, delta_threshold * np.pi / 180.0)
-            obs = env.step_through_interpolated_trajectory(interpolated_trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions=False)
+            obs = env.step_through_interpolated_trajectory(interpolated_trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions)
             continue
 
         if not step_through_instructions:

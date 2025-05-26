@@ -108,7 +108,7 @@ class XArmRealEnv:
         # self.arm.set_gripper_position(gripper_mm, wait=False)
     
     def step_through_interpolated_trajectory(self,
-        trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions=True
+        trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions
     ):
         print(f"[INFO] Interpolation created {len(trajectory)} steps.")
 
