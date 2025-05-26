@@ -3,7 +3,7 @@ from multiprocessing import Process
 
 import tyro
 
-from cameras.realsense_camera import RealSenseCamera, get_device_ids
+from xarm6_control.cameras.realsense_camera import RealSenseCamera, get_device_ids
 from camera_node import ZMQServerCamera
 
 
