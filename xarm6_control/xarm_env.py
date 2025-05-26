@@ -66,7 +66,11 @@ class XArmRealEnv:
         joint_action = np.clip(action[:6], JOINT_LIMITS["lower"], JOINT_LIMITS["upper"])
         gripper_action = np.clip(action[-1], 0, 1)
 
+
+        # Convert to degrees for printing
+        joint_action_deg = np.round(np.degrees(joint_action), 2)
         print(f"[STEP] Joint action: {joint_action}, Gripper action: {gripper_action}")
+        print(f"[STEP] Joint action (deg): {joint_action_deg}, Gripper action: {gripper_action:.3f}")
         # self.arm.set_servo_angle_j(joint_action, is_radian=True, wait=False)
         # gripper_mm = 800 + gripper_action * (0 - 800)
         # self.arm.set_gripper_position(gripper_mm, wait=False)
