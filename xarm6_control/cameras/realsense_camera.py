@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from camera import CameraDriver
+from xarm6_control.cameras.camera import CameraDriver
 
 
 def get_device_ids() -> List[str]:
