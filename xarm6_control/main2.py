@@ -26,7 +26,7 @@ def main(
     control_hz: float = 30.0,  # ← New parameter: control frequency in Hz
     step_through_instructions: bool = False,  # New argument
     delta_threshold: float = 0.25,  # New argument for delta threshold
-    log_dir: str = "/media/acrv/DanielsSSD/VLA_data/Run5"
+    log_dir: str = "/media/acrv/DanielsSSD/VLA_data/Run6"
 ):
     # Create camera clients
     camera_clients = {}
