@@ -1,5 +1,6 @@
 # main.py
 
+import time
 import tyro
 import numpy as np
 from openpi_client import websocket_client_policy, image_tools
@@ -21,6 +22,8 @@ def main(
     max_steps: int = 100,
     prompt: str = "Pick a ripe, red tomato and drop it in the blue bucket.",
     mock: bool = True,
+    control_hz: float = 25.0,  # ← New parameter: control frequency in Hz
+    step_through_instructions: bool = False,  # New argument
 ):
     # Create camera clients
     camera_clients = {}
@@ -46,6 +49,8 @@ def main(
     )
 
     for _ in range(max_steps):
+        start_time = time.time()
+
         obs = env.get_observation()
 
         base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
@@ -60,8 +65,36 @@ def main(
 
         action_chunk = policy_client.infer(observation)["actions"]
 
-        for action in action_chunk:
-            env.step(np.array(action))
+        for i, action in enumerate(action_chunk):
+            if step_through_instructions:
+                current_joints_rad = env.get_observation()["joint_position"]
+                current_joints_deg = np.degrees(current_joints_rad)
+                action_joints_rad = np.array(action[:6])
+                action_joints_deg = np.degrees(action_joints_rad)
+                delta_deg = action_joints_deg - current_joints_deg[:6]
+
+                print(f"\n[STEP {i+1}]")
+                print("Current Joint State (deg):", np.round(current_joints_deg[:6], 2))
+                print("Proposed Action (deg):     ", np.round(action_joints_deg, 2))
+                print("Delta (deg):               ", np.round(delta_deg, 2))
+                print(f"Gripper: {action[-1]:.3f}")
+
+                cmd = input("Press [Enter] to execute, 's' to skip, or 'q' to quit: ").strip().lower()
+                if cmd == "q":
+                    print("Exiting policy execution.")
+                    return
+                elif cmd == "s":
+                    print("Skipping this action.")
+                    continue
+                else:
+                    print("Executing action...")
+                    env.step(np.array(action))
+            else:
+                env.step(np.array(action))
+                # Maintain control rate
+                elapsed = time.time() - start_time
+                sleep_time = max(0.0, (1.0 / control_hz) - elapsed)
+                time.sleep(sleep_time)
 
 
 if __name__ == "__main__":
