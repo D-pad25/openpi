@@ -42,7 +42,7 @@ class XArmRealEnv:
         obs = {
             "joint_position": np.array(joint_position[:6]),  # Keep only 6 joints
             # "gripper_position": np.array([gripper_pos]),
-            "gripper_position": 0,  # Use a placeholder for gripper position
+            "gripper_position": np.array(0),  # Use a placeholder for gripper position
         }
 
          # Build state with 6 joints + 1 gripper
