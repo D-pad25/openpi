@@ -24,6 +24,7 @@ def main(
     mock: bool = True,
     control_hz: float = 25.0,  # ← New parameter: control frequency in Hz
     step_through_instructions: bool = False,  # New argument
+    delta_threshold: float = 10.0,  # New argument for delta threshold
 ):
     # Create camera clients
     camera_clients = {}
@@ -78,6 +79,10 @@ def main(
                 print("Proposed Action (deg):     ", np.round(action_joints_deg, 2))
                 print("Delta (deg):               ", np.round(delta_deg, 2))
                 print(f"Gripper: {action[-1]:.3f}")
+
+
+                if np.any(np.abs(delta_deg) > delta_threshold):
+                    print("⚠️ Warning: large joint delta detected!")
 
                 cmd = input("Press [Enter] to execute, 's' to skip, or 'q' to quit: ").strip().lower()
                 if cmd == "q":
