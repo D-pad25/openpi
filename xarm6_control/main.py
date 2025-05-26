@@ -100,6 +100,10 @@ def main(
             elif cmd == "s":
                 print("Skipping this action.")
                 continue
+        
+        # This line runs ONLY if user pressed [Enter]
+        print("TEST")
+        # env.step(np.array(action))
 
         # Auto mode with delta threshold checking
         if not step_through_instructions and np.any(np.abs(delta_deg) > delta_threshold):
