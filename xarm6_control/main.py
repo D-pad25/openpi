@@ -24,7 +24,7 @@ def main(
     mock: bool = False,
     control_hz: float = 5.0,  # ← New parameter: control frequency in Hz
     step_through_instructions: bool = True,  # New argument
-    delta_threshold: float = 1.0,  # New argument for delta threshold
+    delta_threshold: float = 0.5,  # New argument for delta threshold
 ):
     # Create camera clients
     camera_clients = {}
@@ -133,14 +133,37 @@ def main(
 
                 if interpolated_trajectory:
                     print(f"[INFO] Interpolation created {len(interpolated_trajectory)} steps.")
+
                     for i, interpolated_action in enumerate(interpolated_trajectory):
+                        # Print proposed interpolated action
                         print(f" → Step {i+1}: {np.round(np.degrees(interpolated_action[:6]), 2)} deg | Gripper: {interpolated_action[-1]:.3f}")
+
+                        # Show current joint state and delta
+                        current_joints_deg = np.degrees(obs["joint_position"][:6])
+                        proposed_action_deg = np.degrees(interpolated_action[:6])
+                        delta_deg = proposed_action_deg - current_joints_deg
+
+                        print("Current Joint State (deg):", np.round(current_joints_deg, 2))
+                        print("Proposed Action (deg):     ", np.round(proposed_action_deg, 2))
+                        print("Delta (deg):               ", np.round(delta_deg, 2))
+                        print(f"Gripper pose: {obs['gripper_position']}, Gripper action: {interpolated_action[-1]:.3f}")
+
+                        # Prompt user
+                        cmd = input("Press [Enter] to execute, 's' to skip, or 'q' to quit: ").strip().lower()
+                        if cmd == "q":
+                            print("Exiting policy execution.")
+                            exit()  # Ensures entire script exits cleanly
+                        elif cmd == "s":
+                            print("Skipping this step.")
+                            continue
+
+                        # Execute step
                         # env.step(np.array(interpolated_action))
                         obs["joint_position"] = interpolated_action[:6]
                         obs["gripper_position"] = np.array([interpolated_action[-1]])
+
                 else:
                     print("[WARN] No interpolated steps produced.")
-                # actions_from_chunk_completed = 0
                 continue
 
             # This line runs ONLY if user pressed [Enter]
