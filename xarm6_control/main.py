@@ -138,6 +138,7 @@ def main(
                     print(f"[INFO] Interpolation created {len(interpolated_trajectory)} steps.")
 
                     for i, interpolated_action in enumerate(interpolated_trajectory):
+                        start_time = time.time()
                         # Print proposed interpolated action
                         print(f"\n→ INTERPOLATOIN STEP {i+1}: {np.round(np.degrees(interpolated_action[:6]), 2)} deg | Gripper: {interpolated_action[-1]:.3f}")
 
@@ -168,9 +169,11 @@ def main(
 
                         # Update observation
                         new_frames = env.get_frames()
+                        elapsed = time.time() - start_time
+                        time.sleep(max(0.0, (1.0 / control_hz) - elapsed))
                         obs = env.get_observation()
                         # obs["base_rgb"] = new_frames.get("base_rgb", obs["base_rgb"])
-                        # obs["wrist_rgb"] = new_frames.get("wrist_rgb", obs["wrist_rgb"])
+                        # obs["wrist_rgb"] = new_frameQs.get("wrist_rgb", obs["wrist_rgb"])
                         obs["joint_position"] = interpolated_action[:6]
                         # obs["gripper_position"] = np.array([interpolated_action[-1]])
                     continue
