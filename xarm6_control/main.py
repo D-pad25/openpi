@@ -19,11 +19,11 @@ def main(
     remote_port: int = 8000,
     wrist_camera_port: int = 5000,
     base_camera_port: int = 5001,
-    max_steps: int = 100,
+    max_steps: int = 2000,
     prompt: str = "Pick a ripe, red tomato and drop it in the blue bucket.",
     mock: bool = False,
     control_hz: float = 50.0,  # ← New parameter: control frequency in Hz
-    step_through_instructions: bool = True,  # New argument
+    step_through_instructions: bool = False,  # New argument
     delta_threshold: float = 1.0,  # New argument for delta threshold
 ):
     # Create camera clients
@@ -117,7 +117,8 @@ def main(
             continue  # Skip executing this action
 
         # Execute action
-        # env.step(np.array(action))
+        if not step_through_instructions:
+            env.step(np.array(action))
 
         # Update state after step
         obs["joint_position"] = action_joints_rad
