@@ -100,10 +100,15 @@ def main(
             elif cmd == "s":
                 print("Skipping this action.")
                 continue
-        
-        # This line runs ONLY if user pressed [Enter]
-        print("TEST")
-        # env.step(np.array(action))
+
+            if np.any(np.abs(delta_deg) > delta_threshold):
+                print("❌ Delta too large — action not executed. Skipping.")
+                actions_from_chunk_completed = 0
+                continue
+
+            # This line runs ONLY if user pressed [Enter]
+            print("✅ Executing safe action...")
+            # env.step(np.array(action))
 
         # Auto mode with delta threshold checking
         if not step_through_instructions and np.any(np.abs(delta_deg) > delta_threshold):
