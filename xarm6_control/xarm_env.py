@@ -141,6 +141,7 @@ class XArmRealEnv:
             # obs_to_save = copy.deepcopy(obs)
             # self.save_step_data(log_dir, step_idx, obs_to_save, interpolated_action)
             self.step(np.array(interpolated_action))
+            print(f"interpolated_action: {np.round(np.degrees(interpolated_action[:6]), 2)} deg | Gripper: {interpolated_action[-1]:.3f}")
 
             elapsed = time.time() - start_time
             time.sleep(max(0.0, (1.0 / control_hz) - elapsed))
