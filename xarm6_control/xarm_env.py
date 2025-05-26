@@ -3,10 +3,10 @@
 import numpy as np
 from xarm.wrapper import XArmAPI
 
-JOINT_LIMITS = {
-    "lower": np.radians([-360, -118, -225, -360,  97, -360]),
-    "upper": np.radians([ 360,  120,   11,  360, 180,  360])
-}
+# JOINT_LIMITS = {
+#     "lower": np.radians([-360, -118, -225, -360,  97, -360]),
+#     "upper": np.radians([ 360,  120,   11,  360, 180,  360])
+# }
 
 
 class XArmRealEnv:
@@ -63,7 +63,8 @@ class XArmRealEnv:
 
     def step(self, action: np.ndarray):
         # Clip joint angles to physical joint limits
-        joint_action = np.clip(action[:6], JOINT_LIMITS["lower"], JOINT_LIMITS["upper"])
+        # joint_action = np.clip(action[:6], JOINT_LIMITS["lower"], JOINT_LIMITS["upper"])
+        joint_action = action[:6]
         gripper_action = np.clip(action[-1], 0, 1)
 
 
