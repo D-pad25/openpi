@@ -2,6 +2,7 @@
 
 import time
 import tyro
+import copy
 import numpy as np
 from openpi_client import websocket_client_policy, image_tools
 from xarm_env import XArmRealEnv, MockXArmEnv
@@ -25,6 +26,7 @@ def main(
     control_hz: float = 5.0,  # ← New parameter: control frequency in Hz
     step_through_instructions: bool = True,  # New argument
     delta_threshold: float = 0.25,  # New argument for delta threshold
+    log_dir: str = "/media/acrv/DanielsSSD/VLA_data/Run"
 ):
     # Create camera clients
     camera_clients = {}
@@ -159,7 +161,14 @@ def main(
 
                         # Execute step
                         print("✅ Executing safe action...")
+                        obs_to_save = copy.deepcopy(obs)
+                        env.save_step_data(log_dir, step_idx, obs_to_save, interpolated_action)
                         env.step(np.array(interpolated_action))
+
+                        # Update observation
+                        new_frames = env.get_frames()
+                        obs["base_rgb"] = new_frames.get("base_rgb", obs["base_rgb"])
+                        obs["wrist_rgb"] = new_frames.get("wrist_rgb", obs["wrist_rgb"])
                         obs["joint_position"] = interpolated_action[:6]
                         obs["gripper_position"] = np.array([interpolated_action[-1]])
                     continue
@@ -170,6 +179,8 @@ def main(
 
             # This line runs ONLY if user pressed [Enter]
             print("✅ Executing action...")
+            obs_to_save = copy.deepcopy(obs)
+            env.save_step_data(log_dir, step_idx, obs_to_save, action)
             env.step(np.array(action))
 
         if not step_through_instructions and np.any(np.abs(delta_deg) > delta_threshold):
@@ -193,6 +204,8 @@ def main(
 
         # Execute action
         if not step_through_instructions:
+            obs_to_save = copy.deepcopy(obs)
+            env.save_step_data(log_dir, step_idx, obs_to_save, action)
             env.step(np.array(action))
 
         # Update state after step

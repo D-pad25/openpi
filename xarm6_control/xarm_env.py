@@ -1,6 +1,9 @@
 # xarm_env.py
 
 import numpy as np
+import os
+import time
+import pickle
 from xarm.wrapper import XArmAPI
 
 # JOINT_LIMITS = {
@@ -60,9 +63,15 @@ class XArmRealEnv:
             obs[f"{name}_depth"] = depth
 
         return obs
-
-    import numpy as np
-
+    
+    def get_frames(self):
+        frames = {}
+        for name, camera in self.camera_dict.items():
+            image, depth = camera.read()
+            frames[f"{name}_rgb"] = image
+            frames[f"{name}_depth"] = depth
+        return frames
+    
     def generate_joint_trajectory(self, current_angles, target_angles, max_delta):
         current_angles = np.array(current_angles)
         target_angles = np.array(target_angles)
@@ -97,10 +106,24 @@ class XArmRealEnv:
         # gripper_mm = 800 + gripper_action * (0 - 800)
         # self.arm.set_gripper_position(gripper_mm, wait=False)
 
+    def save_step_data(self, log_dir, step_idx, obs, action):
+        os.makedirs(log_dir, exist_ok=True)
+
+        data = {
+            "step_idx": step_idx,
+            "timestamp": time.time(),
+            "base_rgb": obs["base_rgb"],
+            "wrist_rgb": obs["wrist_rgb"],
+            "joint_position": obs["joint_position"],
+            "gripper_position": obs["gripper_position"],
+            "action": action,
+        }
+
+        file_path = os.path.join(log_dir, f"{step_idx:05d}.pkl")
+        with open(file_path, "wb") as f:
+            pickle.dump(data, f)
+
 # mock_xarm_env.py
-
-import numpy as np
-
 class MockXArmEnv:
     def __init__(self, camera_dict=None):
         self.camera_dict = camera_dict or {}
