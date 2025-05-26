@@ -22,9 +22,9 @@ def main(
     max_steps: int = 100,
     prompt: str = "Pick a ripe, red tomato and drop it in the blue bucket.",
     mock: bool = True,
-    control_hz: float = 25.0,  # ← New parameter: control frequency in Hz
+    control_hz: float = 50.0,  # ← New parameter: control frequency in Hz
     step_through_instructions: bool = True,  # New argument
-    delta_threshold: float = 20.0,  # New argument for delta threshold
+    delta_threshold: float = 5.0,  # New argument for delta threshold
 ):
     # Create camera clients
     camera_clients = {}
@@ -49,60 +49,74 @@ def main(
         port=remote_port,
     )
 
-    for _ in range(max_steps):
+    actions_from_chunk_completed = 0
+    action_chunk = []
+
+    for step_idx in range(max_steps):
         start_time = time.time()
 
-        obs = env.get_observation()
+        # Get new action_chunk if empty or 25 steps have passed
+        if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= 25:
+            obs = env.get_observation()
 
-        base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
-        wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
+            base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
+            wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
 
-        observation = {
-            "state": np.concatenate([obs["joint_position"], obs["gripper_position"]]),
-            "image": base_rgb,
-            "wrist_image": wrist_rgb,
-            "prompt": prompt,
-        }
+            observation = {
+                "state": np.concatenate([obs["joint_position"], obs["gripper_position"]]),
+                "image": base_rgb,
+                "wrist_image": wrist_rgb,
+                "prompt": prompt,
+            }
 
-        action_chunk = policy_client.infer(observation)["actions"]
+            action_chunk = policy_client.infer(observation)["actions"]
+            actions_from_chunk_completed = 0
 
-        for i, action in enumerate(action_chunk):
-            if step_through_instructions:
-                current_joints_rad = obs["joint_position"]
-                current_joints_deg = np.degrees(current_joints_rad)
-                action_joints_rad = np.array(action[:6])
-                action_joints_deg = np.degrees(action_joints_rad)
-                delta_deg = action_joints_deg - current_joints_deg[:6]
+        action = action_chunk[actions_from_chunk_completed]
+        actions_from_chunk_completed += 1
 
-                print(f"\n[STEP {i+1}]")
-                print("Current Joint State (deg):", np.round(current_joints_deg[:6], 2))
-                print("Proposed Action (deg):     ", np.round(action_joints_deg, 2))
-                print("Delta (deg):               ", np.round(delta_deg, 2))
-                print(f"Gripper pose: {obs['gripper_position']}, Gripper action: {action[-1]:.3f}")
+        # Convert joint positions from radians to degrees for display
+        current_joints_rad = obs["joint_position"]
+        current_joints_deg = np.degrees(current_joints_rad)
+        action_joints_rad = np.array(action[:6])
+        action_joints_deg = np.degrees(action_joints_rad)
+        delta_deg = action_joints_deg - current_joints_deg[:6]
 
+        # In step-through mode, pause for input
+        if step_through_instructions:
+            print(f"\n[STEP {step_idx+1}, ACTION {actions_from_chunk_completed}]")
+            print("Current Joint State (deg):", np.round(current_joints_deg[:6], 2))
+            print("Proposed Action (deg):     ", np.round(action_joints_deg, 2))
+            print("Delta (deg):               ", np.round(delta_deg, 2))
+            print(f"Gripper pose: {obs['gripper_position']}, Gripper action: {action[-1]:.3f}")
 
-                if np.any(np.abs(delta_deg) > delta_threshold):
-                    print("⚠️ Warning: large joint delta detected!")
+            if np.any(np.abs(delta_deg) > delta_threshold):
+                print("⚠️ Warning: large joint delta detected!")
 
-                cmd = input("Press [Enter] to execute, 's' to skip, or 'q' to quit: ").strip().lower()
-                if cmd == "q":
-                    print("Exiting policy execution.")
-                    return
-                elif cmd == "s":
-                    print("Skipping this action.")
-                    continue
-                else:
-                    print("Executing action...")
-                    env.step(np.array(action))
+            cmd = input("Press [Enter] to execute, 's' to skip, or 'q' to quit: ").strip().lower()
+            if cmd == "q":
+                print("Exiting policy execution.")
+                break
+            elif cmd == "s":
+                print("Skipping this action.")
+                continue
 
-                obs["joint_position"] = action_joints_rad  # Update observation after step
-                obs["gripper_position"] = np.array([action[-1]])
-            else:
-                env.step(np.array(action))
-                # Maintain control rate
-                elapsed = time.time() - start_time
-                sleep_time = max(0.0, (1.0 / control_hz) - elapsed)
-                time.sleep(sleep_time)
+        # Auto mode with delta threshold checking
+        if not step_through_instructions and np.any(np.abs(delta_deg) > delta_threshold):
+            print(f"[INFO] Large delta detected (>{delta_threshold} deg). Requesting new action chunk.")
+            actions_from_chunk_completed = 0
+            continue  # Skip executing this action
+
+        # Execute action
+        env.step(np.array(action))
+
+        # Update state after step
+        obs["joint_position"] = action_joints_rad
+        obs["gripper_position"] = np.array([action[-1]])
+
+        if not step_through_instructions:
+            elapsed = time.time() - start_time
+            time.sleep(max(0.0, (1.0 / control_hz) - elapsed))
 
 
 if __name__ == "__main__":
