@@ -108,33 +108,36 @@ class XArmRealEnv:
         # self.arm.set_gripper_position(gripper_mm, wait=False)
     
     def step_through_interpolated_trajectory(self,
-        trajectory, obs, step_idx, log_dir, control_hz
+        trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions=True
     ):
         print(f"[INFO] Interpolation created {len(trajectory)} steps.")
 
         for i, interpolated_action in enumerate(trajectory):
             start_time = time.time()
 
-            # current_deg = np.degrees(obs["joint_position"][:6])
-            # proposed_deg = np.degrees(interpolated_action[:6])
-            # delta_deg = proposed_deg - current_deg
-            # gripper = interpolated_action[-1]
+            # Print proposed interpolated action
+            if step_through_instructions:
+                current_deg = np.degrees(obs["joint_position"][:6])
+                proposed_deg = np.degrees(interpolated_action[:6])
+                delta_deg = proposed_deg - current_deg
+                gripper = interpolated_action[-1]
 
-            # print(f"\n→ INTERPOLATION STEP {i+1}:")
-            # print("  Current (deg): ", np.round(current_deg, 2))
-            # print("  Proposed (deg):", np.round(proposed_deg, 2))
-            # print("  Δ Delta (deg): ", np.round(delta_deg, 2))
-            # print(f"  Gripper pose: {obs['gripper_position']}, Gripper action: {gripper:.3f}")
+                print(f"\n→ INTERPOLATION STEP {i+1}:")
+                print("  Current (deg): ", np.round(current_deg, 2))
+                print("  Proposed (deg):", np.round(proposed_deg, 2))
+                print("  Δ Delta (deg): ", np.round(delta_deg, 2))
+                print(f"  Gripper pose: {obs['gripper_position']}, Gripper action: {gripper:.3f}")
 
-            cmd = input("Press [Enter] to execute, 's' to skip, or 'q' to quit: ").strip().lower()
-            if cmd == "q":
-                print("Exiting policy execution.")
-                exit()
-            elif cmd == "s":
-                print("Skipping this step.")
-                continue
+                cmd = input("Press [Enter] to execute, 's' to skip, or 'q' to quit: ").strip().lower()
+                if cmd == "q":
+                    print("Exiting policy execution.")
+                    exit()
+                elif cmd == "s":
+                    print("Skipping this step.")
+                    continue
+                print("✅ Executing safe action...")
 
-            print("✅ Executing safe action...")
+            
             obs_to_save = copy.deepcopy(obs)
             self.save_step_data(log_dir, step_idx, obs_to_save, interpolated_action)
             self.step(np.array(interpolated_action))
