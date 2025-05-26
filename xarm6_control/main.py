@@ -94,6 +94,9 @@ def main(
                 else:
                     print("Executing action...")
                     env.step(np.array(action))
+
+                obs["joint_position"] = action_joints_rad  # Update observation after step
+                obs["gripper_position"] = np.array([action[-1]])
             else:
                 env.step(np.array(action))
                 # Maintain control rate
