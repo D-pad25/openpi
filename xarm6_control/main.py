@@ -129,8 +129,9 @@ def main(
                 print("❌ Delta too large — interpolating instead of skipping.")
                 print(f"[INFO] Large delta detected (>{delta_threshold} deg). Generating interpolated steps...")
 
+                current_full = np.concatenate([current_joints_rad, obs["gripper_position"]])
                 interpolated_trajectory = env.generate_joint_trajectory(
-                    current_joints_rad, action_joints_rad, delta_threshold * np.pi / 180.0
+                    current_full, action, delta_threshold * np.pi / 180.0
                 )
 
                 if interpolated_trajectory:
@@ -167,10 +168,11 @@ def main(
 
                         # Update observation
                         new_frames = env.get_frames()
-                        obs["base_rgb"] = new_frames.get("base_rgb", obs["base_rgb"])
-                        obs["wrist_rgb"] = new_frames.get("wrist_rgb", obs["wrist_rgb"])
+                        obs = env.get_observation()
+                        # obs["base_rgb"] = new_frames.get("base_rgb", obs["base_rgb"])
+                        # obs["wrist_rgb"] = new_frames.get("wrist_rgb", obs["wrist_rgb"])
                         obs["joint_position"] = interpolated_action[:6]
-                        obs["gripper_position"] = np.array([interpolated_action[-1]])
+                        # obs["gripper_position"] = np.array([interpolated_action[-1]])
                     continue
 
                 else:
