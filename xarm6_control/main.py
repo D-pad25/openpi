@@ -99,6 +99,7 @@ def main(
                 break
             elif cmd == "s":
                 print("Skipping this action.")
+                actions_from_chunk_completed = 0
                 continue
 
             if np.any(np.abs(delta_deg) > delta_threshold):
