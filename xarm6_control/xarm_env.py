@@ -61,6 +61,27 @@ class XArmRealEnv:
 
         return obs
 
+    import numpy as np
+
+    def generate_joint_trajectory(current_angles, target_angles, max_delta):
+        current_angles = np.array(current_angles)
+        target_angles = np.array(target_angles)
+        
+        # Calculate the maximum number of steps needed for any joint
+        deltas = np.abs(target_angles - current_angles)
+        num_steps = int(np.max(deltas / max_delta))
+        
+        # If no step is needed, just return the target
+        if num_steps == 0:
+            return [target_angles.tolist()]
+
+        # Linearly interpolate between current and target for each joint
+        trajectory = [
+            (current_angles + (target_angles - current_angles) * step / num_steps).tolist()
+            for step in range(1, num_steps + 1)
+        ]
+        return trajectory
+
     def step(self, action: np.ndarray):
         # Clip joint angles to physical joint limits
         # joint_action = np.clip(action[:6], JOINT_LIMITS["lower"], JOINT_LIMITS["upper"])

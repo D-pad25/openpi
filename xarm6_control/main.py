@@ -102,19 +102,68 @@ def main(
                 actions_from_chunk_completed = 0
                 continue
 
+            # if np.any(np.abs(delta_deg) > delta_threshold):
+            #     print("❌ Delta too large — action not executed. Skipping.")
+
+            #     print(f"[INFO] Large delta detected (>{delta_threshold} deg). Requesting new action chunk.")
+            #     interpolated_trajectory = env.generate_joint_trajectory(
+            #         current_joints_rad, action_joints_rad, max_delta=(delta_threshold * np.pi / 180.0)
+            #     )
+
+            #     if interpolated_trajectory:
+            #         for interpolated_action in interpolated_trajectory:
+            #             if not step_through_instructions:
+            #                 start_time = time.time()
+            #                 env.step(np.array(interpolated_action))
+            #                 obs["joint_position"] = interpolated_action[:6]
+            #                 obs["gripper_position"] = np.array([interpolated_action[-1]])
+            #                 time.sleep(max(0.0, (1.0 / control_hz) - (time.time() - start_time)))
+            #     else:
+            #         print("[WARN] No interpolated steps produced.")
+            #     actions_from_chunk_completed = 0
+            #     continue
+
             if np.any(np.abs(delta_deg) > delta_threshold):
-                print("❌ Delta too large — action not executed. Skipping.")
-                actions_from_chunk_completed = 0
+                print("❌ Delta too large — interpolating instead of skipping.")
+                print(f"[INFO] Large delta detected (>{delta_threshold} deg). Generating interpolated steps...")
+
+                interpolated_trajectory = env.generate_joint_trajectory(
+                    current_joints_rad, action_joints_rad, max_delta=(delta_threshold * np.pi / 180.0)
+                )
+
+                if interpolated_trajectory:
+                    print(f"[INFO] Interpolation created {len(interpolated_trajectory)} steps.")
+                    for i, interpolated_action in enumerate(interpolated_trajectory):
+                        print(f" → Step {i+1}: {np.round(np.degrees(interpolated_action[:6]), 2)} deg | Gripper: {interpolated_action[-1]:.3f}")
+                        # env.step(np.array(interpolated_action))
+                        obs["joint_position"] = interpolated_action[:6]
+                        obs["gripper_position"] = np.array([interpolated_action[-1]])
+                else:
+                    print("[WARN] No interpolated steps produced.")
+                # actions_from_chunk_completed = 0
                 continue
 
             # This line runs ONLY if user pressed [Enter]
             print("✅ Executing safe action...")
             env.step(np.array(action))
 
-        # Auto mode with delta threshold checking
         if not step_through_instructions and np.any(np.abs(delta_deg) > delta_threshold):
             print(f"[INFO] Large delta detected (>{delta_threshold} deg). Requesting new action chunk.")
-            actions_from_chunk_completed = 0
+            interpolated_trajectory = env.generate_joint_trajectory(
+                current_joints_rad, action_joints_rad, max_delta=(delta_threshold * np.pi / 180.0)
+            )
+
+            if interpolated_trajectory:
+                for interpolated_action in interpolated_trajectory:
+                    if not step_through_instructions:
+                        start_time = time.time()
+                        env.step(np.array(interpolated_action))
+                        obs["joint_position"] = interpolated_action[:6]
+                        obs["gripper_position"] = np.array([interpolated_action[-1]])
+                        time.sleep(max(0.0, (1.0 / control_hz) - (time.time() - start_time)))
+            else:
+                print("[WARN] No interpolated steps produced.")
+            # actions_from_chunk_completed = 0
             continue  # Skip executing this action
 
         # Execute action
