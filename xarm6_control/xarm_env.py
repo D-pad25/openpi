@@ -78,7 +78,7 @@ class XArmRealEnv:
         target_angles = np.array(target_angles)
         
         # Calculate the maximum number of steps needed for any joint
-        deltas = np.abs(target_angles - current_angles)
+        deltas = np.abs(target_angles[:6] - current_angles[:6])
         num_steps = int(np.max(deltas / max_delta))
         
         # If no step is needed, just return the target
