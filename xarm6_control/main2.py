@@ -59,8 +59,7 @@ def main(
         obs = env.get_observation()
         # Get new action_chunk if empty or 25 steps have passed
         if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= 25:
-            # obs = env.get_observation()
-
+            # pad images as per policy requirements
             base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
             wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
 
@@ -70,22 +69,21 @@ def main(
                 "wrist_image": wrist_rgb,
                 "prompt": prompt,
             }
-
+            # Request new action chunk from policy
             action_chunk = policy_client.infer(observation)["actions"]
             actions_from_chunk_completed = 0
 
         action = action_chunk[actions_from_chunk_completed]
         actions_from_chunk_completed += 1
 
-        # Convert joint positions from radians to degrees for display
-        current_joints_rad = obs["joint_position"]
-        current_joints_deg = np.degrees(current_joints_rad)
-        action_joints_rad = np.array(action[:6])
-        action_joints_deg = np.degrees(action_joints_rad)
-        delta_deg = action_joints_deg - current_joints_deg[:6]
+        # Convert joint positions and compute delta (in degrees)
+        current_joints_deg = np.degrees(obs["joint_position"][:6])
+        action_joints_deg = np.degrees(action[:6])
+        delta_deg = action_joints_deg - current_joints_deg
 
         # In step-through mode, pause for input
         if step_through_instructions:
+            start_time = time.time()
             print(f"\n[STEP {step_idx+1}, ACTION {actions_from_chunk_completed}]")
             print("Current Joint State (deg):", np.round(current_joints_deg[:6], 2))
             print("Proposed Action (deg):     ", np.round(action_joints_deg, 2))
@@ -105,96 +103,37 @@ def main(
                 continue
 
             if np.any(np.abs(delta_deg) > delta_threshold):
-                print("❌ Delta too large — interpolating instead of skipping.")
                 print(f"[INFO] Large delta detected (>{delta_threshold} deg). Generating interpolated steps...")
-
-                current_full = np.concatenate([current_joints_rad, obs["gripper_position"]])
-                interpolated_trajectory = env.generate_joint_trajectory(
-                    current_full, action, delta_threshold * np.pi / 180.0
-                )
-
-                if interpolated_trajectory:
-                    print(f"[INFO] Interpolation created {len(interpolated_trajectory)} steps.")
-
-                    for i, interpolated_action in enumerate(interpolated_trajectory):
-                        start_time = time.time()
-                        # Print proposed interpolated action
-                        print(f"\n→ INTERPOLATOIN STEP {i+1}: {np.round(np.degrees(interpolated_action[:6]), 2)} deg | Gripper: {interpolated_action[-1]:.3f}")
-
-                        # Show current joint state and delta
-                        current_joints_deg = np.degrees(obs["joint_position"][:6])
-                        proposed_action_deg = np.degrees(interpolated_action[:6])
-                        delta_deg = proposed_action_deg - current_joints_deg
-
-                        print("Current Joint State (deg):", np.round(current_joints_deg, 2))
-                        print("Proposed Action (deg):     ", np.round(proposed_action_deg, 2))
-                        print("Delta (deg):               ", np.round(delta_deg, 2))
-                        print(f"Gripper pose: {obs['gripper_position']}, Gripper action: {interpolated_action[-1]:.3f}")
-
-                        # Prompt user
-                        cmd = input("Press [Enter] to execute, 's' to skip, or 'q' to quit: ").strip().lower()
-                        if cmd == "q":
-                            print("Exiting policy execution.")
-                            exit()  # Ensures entire script exits cleanly
-                        elif cmd == "s":
-                            print("Skipping this step.")
-                            continue
-
-                        # Execute step
-                        print("✅ Executing safe action...")
-                        obs_to_save = copy.deepcopy(obs)
-                        env.save_step_data(log_dir, step_idx, obs_to_save, interpolated_action)
-                        env.step(np.array(interpolated_action))
-
-                        # Update observation
-                        new_frames = env.get_frames()
-                        elapsed = time.time() - start_time
-                        time.sleep(max(0.0, (1.0 / control_hz) - elapsed))
-                        obs = env.get_observation()
-                        # obs["base_rgb"] = new_frames.get("base_rgb", obs["base_rgb"])
-                        # obs["wrist_rgb"] = new_frameQs.get("wrist_rgb", obs["wrist_rgb"])
-                        obs["joint_position"] = interpolated_action[:6]
-                        # obs["gripper_position"] = np.array([interpolated_action[-1]])
-                    continue
-
-                else:
-                    print("[WARN] No interpolated steps produced.")
+                # Convert current and action joints to radians for interpolation
+                state = np.concatenate([obs["joint_position"], obs["gripper_position"]])
+                # Interpolate trajectory if delta exceeds threshold
+                interpolated_trajectory = env.generate_joint_trajectory(state, action, delta_threshold * np.pi / 180.0)
+                obs = env.step_through_interpolated_trajectory(interpolated_trajectory, obs, step_idx, log_dir, control_hz)
                 continue
+
 
             # This line runs ONLY if user pressed [Enter]
             print("✅ Executing action...")
             obs_to_save = copy.deepcopy(obs)
             env.save_step_data(log_dir, step_idx, obs_to_save, action)
             env.step(np.array(action))
+            elapsed = time.time() - start_time
+            time.sleep(max(0.0, (1.0 / control_hz) - elapsed))
 
         if not step_through_instructions and np.any(np.abs(delta_deg) > delta_threshold):
             print(f"[INFO] Large delta detected (>{delta_threshold} deg). Requesting new action chunk.")
-            interpolated_trajectory = env.generate_joint_trajectory(
-                current_joints_rad, action_joints_rad, max_delta=(delta_threshold * np.pi / 180.0)
-            )
-
-            if interpolated_trajectory:
-                for interpolated_action in interpolated_trajectory:
-                    if not step_through_instructions:
-                        start_time = time.time()
-                        env.step(np.array(interpolated_action))
-                        obs["joint_position"] = interpolated_action[:6]
-                        obs["gripper_position"] = np.array([interpolated_action[-1]])
-                        time.sleep(max(0.0, (1.0 / control_hz) - (time.time() - start_time)))
-            else:
-                print("[WARN] No interpolated steps produced.")
-            # actions_from_chunk_completed = 0
-            continue  # Skip executing this action
+            # Convert current and action joints to radians for interpolation
+            state = np.concatenate([obs["joint_position"], obs["gripper_position"]])
+            # Interpolate trajectory if delta exceeds threshold
+            interpolated_trajectory = env.generate_joint_trajectory(state, action, delta_threshold * np.pi / 180.0)
+            obs = env.step_through_interpolated_trajectory(interpolated_trajectory, obs, step_idx, log_dir, control_hz)
+            continue
 
         # Execute action
         if not step_through_instructions:
             obs_to_save = copy.deepcopy(obs)
             env.save_step_data(log_dir, step_idx, obs_to_save, action)
             env.step(np.array(action))
-
-        # Update state after step
-        obs["joint_position"] = action_joints_rad
-        obs["gripper_position"] = np.array([action[-1]])
 
         if not step_through_instructions:
             elapsed = time.time() - start_time
