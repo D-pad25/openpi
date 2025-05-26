@@ -24,7 +24,7 @@ def main(
     mock: bool = False,
     control_hz: float = 50.0,  # ← New parameter: control frequency in Hz
     step_through_instructions: bool = True,  # New argument
-    delta_threshold: float = 5.0,  # New argument for delta threshold
+    delta_threshold: float = 1.0,  # New argument for delta threshold
 ):
     # Create camera clients
     camera_clients = {}
