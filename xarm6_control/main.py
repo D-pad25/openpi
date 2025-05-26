@@ -159,7 +159,7 @@ def main(
 
                         # Execute step
                         print("✅ Executing safe action...")
-                        # env.step(np.array(interpolated_action))
+                        env.step(np.array(interpolated_action))
                         obs["joint_position"] = interpolated_action[:6]
                         obs["gripper_position"] = np.array([interpolated_action[-1]])
                     continue
