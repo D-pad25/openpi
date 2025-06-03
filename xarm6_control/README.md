@@ -9,13 +9,6 @@ This module provides real-time control and observation utilities for the xArm6 r
 - Send actions to the xArm6 controller via `position`, `velocity`, or `servo` mode
 - Support for real-world deployment and debug-friendly logging
 
-## 📁 Folder Structure
-xarm6_control/
-│
-├── controller.py # Action execution utilities (e.g. apply_joint_action)
-├── observation.py # Camera and joint state capture
-├── main.py # Entry-point to run a policy on real robot
-└── README.md # This file
 
 ## Get the policy running
 1. Get the server up on running on the HPC
@@ -36,7 +29,7 @@ uv run scripts/serve_policy.py --env XARM --port 8000
 
 2. Set up SSH tunnel from client to the HPC server node
 ```bash
-ssh -L 8080:10.13.22.1:8080 n10813934@aqua.qut.edu.au
+ssh -L 8000:10.13.22.1:8000 n10813934@aqua.qut.edu.au
 ```
 
 3. Run the client (make relative path)
