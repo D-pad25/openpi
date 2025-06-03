@@ -117,16 +117,14 @@ def main(
 
             # This line runs ONLY if user pressed [Enter]
             print("✅ Executing action...")
-            if not mock:
-                obs_to_save = copy.deepcopy(obs)
-                env.save_step_data(log_dir, step_idx, obs_to_save, action)
-
+            obs_to_save = copy.deepcopy(obs)
+            env.save_step_data(log_dir, step_idx, obs_to_save, action)
             env.step(np.array(action))
             elapsed = time.time() - start_time
             time.sleep(max(0.0, (1.0 / control_hz) - elapsed))
 
         # Execute action
-        if not step_through_instructions and np.any(np.abs(delta_deg) < delta_threshold) and not mock:
+        if not step_through_instructions and np.any(np.abs(delta_deg) < delta_threshold):
             obs_to_save = copy.deepcopy(obs)
             env.save_step_data(log_dir, step_idx, obs_to_save, action)
             env.step(np.array(action))
