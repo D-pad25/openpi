@@ -33,6 +33,14 @@ ssh -L 8000:10.13.22.1:8000 n10813934@aqua.qut.edu.au
 ```
 
 3. Run the client (make relative path)
+3.1 Set up enviroment
 ```bash
-PYTHONPATH=. uv run xarm6_control/main2.py --remote_host localhost --remote_port 8000
+source .venv/bin/activate
+source /opt/ros/noetic/setup.bash
+export PYTHONPATH=$PYTHONPATH:/opt/ros/noetic/lib/python3/dist-packages
+```
+
+3.2 Run the script (refferencing local dir and rospy)
+```bash
+PYTHONPATH=.:/opt/ros/noetic/lib/python3/dist-packages uv run xarm6_control/main2.py --remote_host localhost --remote_port 8000
 ```
