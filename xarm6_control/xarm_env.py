@@ -7,51 +7,15 @@ import time
 import pickle
 from xarm.wrapper import XArmAPI
 import datetime
+import rospy
+import std_msgs.msg
+from experiments import Gripper_Sub
 
 # JOINT_LIMITS = {
 #     "lower": np.radians([-360, -118, -225, -360,  97, -360]),
 #     "upper": np.radians([ 360,  120,   11,  360, 180,  360])
 # }
 
-import rospy
-import std_msgs.msg
-from experiments import Gripper_Sub
-import numpy as np
-
-
-
-
-
-
-
-
-
-def test_gripper_loop():
-    """Test routine to validate gripper publisher and subscriber communication."""
-    sub, pub = init_gripper_communication()
-    rospy.sleep(1.0)  # allow time for connection
-
-    test_values = [0.2, 0.5, 0.8, 0]  # fully open, half closed, fully closed
-
-    print("🔧 Gripper command test started...")
-    try:
-        for value in test_values:
-            print(f"\n➡️  Sending gripper command: {value:.2f}")
-            publish_gripper_command(pub, value)
-
-            # Give time for physical or simulated system to respond
-            rospy.sleep(2.0)
-
-            feedback = get_normalized_gripper_position(sub)
-            print(f"📥 Gripper feedback (normalized): {feedback:.3f}")
-    except rospy.ROSInterruptException:
-        print("🛑 ROS interrupted.")
-    except KeyboardInterrupt:
-        print("🛑 Test manually stopped.")
-    print("✅ Gripper test completed.")
-
-if __name__ == "__main__":
-    test_gripper_loop()
 
 
 class XArmRealEnv:
@@ -93,7 +57,7 @@ class XArmRealEnv:
         """
         # Scale normalized input [0.0, 1.0] to [0, 200]
         scaled_value = max(0, min(200, int(round(normalized_pos * 200))))
-        print(f'sending messagee {scaled_value}')
+        # print(f'sending messagee {scaled_value}')
         # Create and publish message
         msg = std_msgs.msg.Int16()
         msg.data = scaled_value
