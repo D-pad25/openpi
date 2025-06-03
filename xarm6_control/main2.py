@@ -7,7 +7,8 @@ import numpy as np
 from openpi_client import websocket_client_policy, image_tools
 from xarm_env import XArmRealEnv, MockXArmEnv
 from zmq_core.camera_node import ZMQClientCamera
-
+import datetime
+import os
 class MockCamera:
     def read(self, img_size=None):
         # Return fake RGB and depth images
@@ -26,8 +27,13 @@ def main(
     control_hz: float = 30.0,  # ← New parameter: control frequency in Hz
     step_through_instructions: bool = False,  # New argument
     delta_threshold: float = 0.25,  # New argument for delta threshold
-    log_dir: str = "/media/acrv/DanielsSSD/VLA_data/Run6"
+    log_dir: str = "/media/acrv/DanielsSSD/VLA_data",
 ):
+    # Create a log directory if it doesn't exist
+    log_dir = os.path.join(log_dir, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+    os.makedirs(log_dir, exist_ok=True)
+    print(f"Log directory created at: {log_dir}")
+
     # Create camera clients
     camera_clients = {}
 

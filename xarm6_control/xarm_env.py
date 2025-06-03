@@ -6,6 +6,7 @@ import os
 import time
 import pickle
 from xarm.wrapper import XArmAPI
+import datetime
 
 # JOINT_LIMITS = {
 #     "lower": np.radians([-360, -118, -225, -360,  97, -360]),
@@ -150,8 +151,6 @@ class XArmRealEnv:
         return obs
 
     def save_step_data(self, log_dir, step_idx, obs, action):
-        os.makedirs(log_dir, exist_ok=True)
-
         data = {
             "timestamp": time.time(),
             "base_rgb": obs["base_rgb"],
