@@ -19,7 +19,7 @@ def test_gripper_only():
     try:
         for value in test_values:
             print(f"\n➡️  Sending gripper command: {value:.2f}")
-            # env._publish_gripper_command(value)
+            env._publish_gripper_command(value)
 
             time.sleep(2.0)  # Allow time for physical or simulated movement
 
