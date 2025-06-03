@@ -30,7 +30,9 @@ class GripperPoseSubscriber:
 class XArmRealEnv:
     def __init__(self, ip="192.168.1.203", camera_dict=None):
         self.arm = XArmAPI(ip, is_radian=True)
+        print(f"Connecting to xArm at {ip}...")
         self._initialize_arm()
+        print("xArm connected and initialized.")
         self._init_gripper_communication()
         self.camera_dict = camera_dict or {}
 
