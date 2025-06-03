@@ -39,7 +39,7 @@ uv run scripts/serve_policy.py --env XARM --port 8000
 ssh -L 8080:10.13.22.1:8080 n10813934@aqua.qut.edu.au
 ```
 
-3. Run the client 
+3. Run the client (make relative path)
 ```bash
-uv run xarm6_control/main2.py --remote_host localhost --remote_port 8080
+PYTHONPATH=. uv run xarm6_control/main2.py --remote_host localhost --remote_port 8000
 ```
