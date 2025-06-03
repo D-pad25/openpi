@@ -23,7 +23,7 @@ def main(
     base_camera_port: int = 5001,
     max_steps: int = 5000,
     prompt: str = "Pick a ripe, red tomato and drop it in the blue bucket.",
-    mock: bool = True,
+    mock: bool = False,
     control_hz: float = 30.0,  # ← New parameter: control frequency in Hz
     step_through_instructions: bool = True,  # New argument
     delta_threshold: float = 0.25,  # New argument for delta threshold
