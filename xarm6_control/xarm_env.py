@@ -9,14 +9,23 @@ from xarm.wrapper import XArmAPI
 import datetime
 import rospy
 import std_msgs.msg
-from experiments import Gripper_Sub
+
 
 # JOINT_LIMITS = {
 #     "lower": np.radians([-360, -118, -225, -360,  97, -360]),
 #     "upper": np.radians([ 360,  120,   11,  360, 180,  360])
 # }
 
+class GripperPoseSubscriber:
+    def __init__(self):
+        self._gripper_pos = None
+        rospy.Subscriber('/gripper_position', std_msgs.msg.Float32, self._callback)
 
+    def _callback(self, msg):
+        self._gripper_pos = msg.data
+
+    def get_latest_position(self):
+        return self._gripper_pos
 
 class XArmRealEnv:
     def __init__(self, ip="192.168.1.203", camera_dict=None):
@@ -36,7 +45,7 @@ class XArmRealEnv:
     def _init_gripper_communication(self):
         """Initializes the ROS publisher and subscriber for gripper control."""
         rospy.init_node('xarm_gripper_node', anonymous=True)
-        self.gripper_pose_sub = Gripper_Sub.GripperPoseSubscriber()
+        self.gripper_pose_sub = GripperPoseSubscriber()
         self.gripper_pose_pub = rospy.Publisher('/gripper_command', std_msgs.msg.Int16, queue_size=10)
 
     def _get_normalized_gripper_position(self) -> float:
