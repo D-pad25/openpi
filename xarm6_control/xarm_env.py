@@ -10,6 +10,9 @@ import datetime
 import rospy
 import std_msgs.msg
 
+import rosgraph
+
+
 
 # JOINT_LIMITS = {
 #     "lower": np.radians([-360, -118, -225, -360,  97, -360]),
@@ -44,12 +47,30 @@ class XArmRealEnv:
         self.arm.set_collision_sensitivity(0)
         self.arm.set_state(state=0)
 
+    # def _init_gripper_communication(self):
+    #     print("Initializing gripper communication...")
+    #     rospy.init_node('xarm_gripper_node', anonymous=True)
+    #     self.gripper_pose_sub = GripperPoseSubscriber()
+    #     self.gripper_pose_pub = rospy.Publisher('/gripper_command', std_msgs.msg.Int16, queue_size=10)
+    #     print("Gripper communication initialized. Waiting for gripper position...")
     def _init_gripper_communication(self):
-        print("Initializing gripper communication...")
-        rospy.init_node('xarm_gripper_node', anonymous=True)
+        print("🔧 Initializing gripper communication...")
+
+        if not rosgraph.is_master_online():
+            print("❌ ROS master is NOT running. Start it with: roscore")
+            exit(1)
+        print("📡 ROS master is online — initializing node...")
+
+        try:
+            rospy.init_node(f'xarm_gripper_node_{os.getpid()}', anonymous=True)
+            print("✅ Node initialized!")
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize node: {e}")
+            exit(1)
+
         self.gripper_pose_sub = GripperPoseSubscriber()
         self.gripper_pose_pub = rospy.Publisher('/gripper_command', std_msgs.msg.Int16, queue_size=10)
-        print("Gripper communication initialized. Waiting for gripper position...")
+        print("📬 Gripper communication setup complete.")
 
     def _get_normalized_gripper_position(self) -> float:
         """Returns the gripper position as a normalized float in [0.0, 1.0]."""
