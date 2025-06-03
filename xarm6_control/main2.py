@@ -50,7 +50,7 @@ def main(
         host=remote_host,
         port=remote_port,
     )
-
+    print(f"Connecting to policy server at ws://{remote_host}:{remote_port}...")
     actions_from_chunk_completed = 0
     action_chunk = []
     
