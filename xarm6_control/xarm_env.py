@@ -97,7 +97,7 @@ class XArmRealEnv:
         # Create and publish message
         msg = std_msgs.msg.Int16()
         msg.data = scaled_value
-        self.gripper_pose_pub.publish(msg)
+        # self.gripper_pose_pub.publish(msg)
 
     def _get_joint_position(self):
         code, joint_position = self.arm.get_servo_angle(is_radian=True)
