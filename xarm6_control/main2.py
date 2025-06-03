@@ -53,7 +53,7 @@ def main(
             "base": ZMQClientCamera(port=base_camera_port, host=remote_host),
         }
         env = XArmRealEnv(camera_dict=camera_clients)
-
+    print("Attempting to connect to server...")
     # Connect to the policy server
     policy_client = websocket_client_policy.WebsocketClientPolicy(
         host=remote_host,
