@@ -45,8 +45,7 @@ class XArmRealEnv:
         self.arm.set_state(state=0)
 
     def _init_gripper_communication(self):
-        print
-        """Initializes the ROS publisher and subscriber for gripper control."""
+        print("Initializing gripper communication...")
         rospy.init_node('xarm_gripper_node', anonymous=True)
         self.gripper_pose_sub = GripperPoseSubscriber()
         self.gripper_pose_pub = rospy.Publisher('/gripper_command', std_msgs.msg.Int16, queue_size=10)
