@@ -32,9 +32,10 @@ def main(
     save: bool = False,  # New argument to control saving behavior
 ):
     # Create a log directory if it doesn't exist
-    log_dir = os.path.join(log_dir, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
-    os.makedirs(log_dir, exist_ok=True)
-    print(f"Log directory created at: {log_dir}")
+    if save:
+        log_dir = os.path.join(log_dir, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+        os.makedirs(log_dir, exist_ok=True)
+        print(f"Log directory created at: {log_dir}")
 
     # Create camera clients
     camera_clients = {}
