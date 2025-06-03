@@ -13,11 +13,52 @@ import datetime
 #     "upper": np.radians([ 360,  120,   11,  360, 180,  360])
 # }
 
+import rospy
+import std_msgs.msg
+from experiments import Gripper_Sub
+import numpy as np
+
+
+
+
+
+
+
+
+
+def test_gripper_loop():
+    """Test routine to validate gripper publisher and subscriber communication."""
+    sub, pub = init_gripper_communication()
+    rospy.sleep(1.0)  # allow time for connection
+
+    test_values = [0.2, 0.5, 0.8, 0]  # fully open, half closed, fully closed
+
+    print("🔧 Gripper command test started...")
+    try:
+        for value in test_values:
+            print(f"\n➡️  Sending gripper command: {value:.2f}")
+            publish_gripper_command(pub, value)
+
+            # Give time for physical or simulated system to respond
+            rospy.sleep(2.0)
+
+            feedback = get_normalized_gripper_position(sub)
+            print(f"📥 Gripper feedback (normalized): {feedback:.3f}")
+    except rospy.ROSInterruptException:
+        print("🛑 ROS interrupted.")
+    except KeyboardInterrupt:
+        print("🛑 Test manually stopped.")
+    print("✅ Gripper test completed.")
+
+if __name__ == "__main__":
+    test_gripper_loop()
+
 
 class XArmRealEnv:
     def __init__(self, ip="192.168.1.203", camera_dict=None):
         self.arm = XArmAPI(ip, is_radian=True)
         self._initialize_arm()
+        self._init_gripper_communication()
         self.camera_dict = camera_dict or {}
 
     def _initialize_arm(self):
@@ -28,6 +69,36 @@ class XArmRealEnv:
         self.arm.set_collision_sensitivity(0)
         self.arm.set_state(state=0)
 
+    def _init_gripper_communication(self):
+        """Initializes the ROS publisher and subscriber for gripper control."""
+        rospy.init_node('xarm_gripper_node', anonymous=True)
+        self.gripper_pose_sub = Gripper_Sub.GripperPoseSubscriber()
+        self.gripper_pose_pub = rospy.Publisher('/gripper_command', std_msgs.msg.Int16, queue_size=10)
+
+    def _get_normalized_gripper_position(self) -> float:
+        """Returns the gripper position as a normalized float in [0.0, 1.0]."""
+        raw_gripper_pos = self.gripper_pose_sub.get_latest_position()
+        try:
+            return max(0.0, min(1.0, float(raw_gripper_pos) / 255.0))
+        except Exception:
+            rospy.logwarn(f"Invalid gripper pose received: {raw_gripper_pos}")
+            return 0.0
+
+    def _publish_gripper_command(self, normalized_pos: float):
+        """
+        Publishes a gripper command via ROS.
+
+        Args:
+            normalized_pos: Normalized gripper command in range [0.0, 1.0]
+        """
+        # Scale normalized input [0.0, 1.0] to [0, 200]
+        scaled_value = max(0, min(200, int(round(normalized_pos * 200))))
+        print(f'sending messagee {scaled_value}')
+        # Create and publish message
+        msg = std_msgs.msg.Int16()
+        msg.data = scaled_value
+        self.gripper_pose_pub.publish(msg)
+
     def _get_joint_position(self):
         code, joint_position = self.arm.get_servo_angle(is_radian=True)
         while code != 0 or joint_position is None:
@@ -36,26 +107,16 @@ class XArmRealEnv:
             code, joint_position = self.arm.get_servo_angle(is_radian=True)
         return joint_position
 
-    def _get_gripper_position(self):
-        code, gripper_pos = self.arm.get_gripper_position()
-        while code != 0 or gripper_pos is None:
-            print(f"[WARN] get_gripper_position() failed with code {code}. Retrying...")
-            self._initialize_arm()
-            code, gripper_pos = self.arm.get_gripper_position()
-        return gripper_pos
-
     def get_observation(self):
         joint_position = self._get_joint_position()
-        # gripper_pos = self._get_gripper_position()
-        # gripper_pos = (gripper_pos - 800) / (0 - 800)  # Normalize to [0, 1]
+        gripper_position = self._get_normalized_gripper_position()
 
         obs = {
             "joint_position": np.array(joint_position[:6]),  # Keep only 6 joints
-            # "gripper_position": np.array([gripper_pos]),
-            "gripper_position": np.array([0]),  # Use a placeholder for gripper position
+            "gripper_position": np.array([gripper_position]),
         }
 
-         # Build state with 6 joints + 1 gripper
+        # Build state with 6 joints + 1 gripper
         obs["state"] = np.concatenate([obs["joint_position"], obs["gripper_position"]])
 
         # Include camera observations if available
@@ -105,7 +166,7 @@ class XArmRealEnv:
         print(f"[STEP] Joint action: {joint_action}, Gripper action: {gripper_action}")
         print(f"[STEP] Joint action (deg): {joint_action_deg}, Gripper action: {gripper_action:.3f}")
         self.arm.set_servo_angle_j(joint_action, is_radian=True, wait=False)
-        # gripper_mm = 800 + gripper_action * (0 - 800)
+        self._publish_gripper_command(gripper_action)
         # self.arm.set_gripper_position(gripper_mm, wait=False)
     
     def step_through_interpolated_trajectory(self,
