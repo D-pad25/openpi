@@ -134,7 +134,7 @@ class XArmRealEnv:
         # self.arm.set_gripper_position(gripper_mm, wait=False)
     
     def step_through_interpolated_trajectory(self,
-        trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions
+        trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions, save
     ):
         print(f"[INFO] Interpolation created {len(trajectory)} steps.")
 
@@ -163,9 +163,9 @@ class XArmRealEnv:
                     continue
                 print("✅ Executing safe action...")
 
-            
-            obs_to_save = copy.deepcopy(obs)
-            self.save_step_data(log_dir, step_idx, obs_to_save, interpolated_action)
+            if save:
+                obs_to_save = copy.deepcopy(obs)
+                self.save_step_data(log_dir, step_idx, obs_to_save, interpolated_action)
             self.step(np.array(interpolated_action))
             print(f"interpolated_action: {np.round(np.degrees(interpolated_action[:6]), 2)} deg | Gripper: {interpolated_action[-1]:.3f}")
 

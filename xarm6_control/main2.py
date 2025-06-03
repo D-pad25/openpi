@@ -25,10 +25,11 @@ def main(
     prompt: str = "Pick a ripe, red tomato and drop it in the blue bucket.",
     mock: bool = True,
     control_hz: float = 30.0,  # ← New parameter: control frequency in Hz
-    step_through_instructions: bool = False,  # New argument
+    step_through_instructions: bool = True,  # New argument
     delta_threshold: float = 0.25,  # New argument for delta threshold
     log_dir: str = "/media/acrv/DanielsSSD/VLA_data",
     # log_dir: str = os.path.expanduser("~/test_logs"),
+    save: bool = False,  # New argument to control saving behavior
 ):
     # Create a log directory if it doesn't exist
     log_dir = os.path.join(log_dir, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
@@ -118,22 +119,24 @@ def main(
                 state = np.concatenate([obs["joint_position"], obs["gripper_position"]])
                 # Interpolate trajectory if delta exceeds threshold
                 interpolated_trajectory = env.generate_joint_trajectory(state, action, delta_threshold * np.pi / 180.0)
-                obs = env.step_through_interpolated_trajectory(interpolated_trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions)
+                obs = env.step_through_interpolated_trajectory(interpolated_trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions, save)
                 continue
 
 
             # This line runs ONLY if user pressed [Enter]
             print("✅ Executing action...")
-            obs_to_save = copy.deepcopy(obs)
-            env.save_step_data(log_dir, step_idx, obs_to_save, action)
+            if save:
+                obs_to_save = copy.deepcopy(obs)
+                env.save_step_data(log_dir, step_idx, obs_to_save, action)
             env.step(np.array(action))
             elapsed = time.time() - start_time
             time.sleep(max(0.0, (1.0 / control_hz) - elapsed))
 
         # Execute action
         if not step_through_instructions and np.any(np.abs(delta_deg) < delta_threshold):
-            obs_to_save = copy.deepcopy(obs)
-            env.save_step_data(log_dir, step_idx, obs_to_save, action)
+            if save:
+                obs_to_save = copy.deepcopy(obs)
+                env.save_step_data(log_dir, step_idx, obs_to_save, action)
             env.step(np.array(action))
 
 
@@ -143,7 +146,7 @@ def main(
             state = np.concatenate([obs["joint_position"], obs["gripper_position"]])
             # Interpolate trajectory if delta exceeds threshold
             interpolated_trajectory = env.generate_joint_trajectory(state, action, delta_threshold * np.pi / 180.0)
-            obs = env.step_through_interpolated_trajectory(interpolated_trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions)
+            obs = env.step_through_interpolated_trajectory(interpolated_trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions, save)
             continue
 
         if not step_through_instructions:
