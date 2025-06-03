@@ -7,6 +7,12 @@ import time
 import pickle
 from xarm.wrapper import XArmAPI
 import datetime
+
+
+# Force local loopback for ROS comms to avoid DNS/hostname issues
+os.environ["ROS_HOSTNAME"] = "localhost"
+os.environ["ROS_MASTER_URI"] = "http://localhost:11311"
+
 import rospy
 import std_msgs.msg
 
