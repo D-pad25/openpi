@@ -27,7 +27,8 @@ def main(
     control_hz: float = 30.0,  # ← New parameter: control frequency in Hz
     step_through_instructions: bool = False,  # New argument
     delta_threshold: float = 0.25,  # New argument for delta threshold
-    log_dir: str = "/media/acrv/DanielsSSD/VLA_data",
+    # log_dir: str = "/media/acrv/DanielsSSD/VLA_data",
+    log_name: str = os.path.expanduser("~/test_logs"),
 ):
     # Create a log directory if it doesn't exist
     log_dir = os.path.join(log_dir, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
