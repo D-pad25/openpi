@@ -12,7 +12,7 @@ def test_gripper_only():
 
     time.sleep(1.0)  # Allow ROS time to initialize
 
-    test_values = [0.0, 0.2, 0.5, 0.8, 0.0]  # Normalized gripper commands
+    test_values = [0.0, 0.2, 0.5, 0.8, 1.0, 0.0]  # Normalized gripper commands
 
     print("🧪 Starting gripper command test...")
 
