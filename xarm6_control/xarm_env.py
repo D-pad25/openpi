@@ -90,8 +90,8 @@ class XArmRealEnv:
     def get_observation(self):
         joint_position = self._get_joint_position()
         gripper_position = self._get_normalized_gripper_position()
-        print(f"[DEBUG] Joint position: {joint_position}")
-        print(f"[DEBUG] Gripper position: {gripper_position:.3f}")
+        # print(f"[DEBUG] Joint position: {joint_position}")
+        # print(f"[DEBUG] Gripper position: {gripper_position:.3f}")
         obs = {
             "joint_position": np.array(joint_position[:6]),  # Keep only 6 joints
             "gripper_position": np.array([gripper_position]),
@@ -101,12 +101,12 @@ class XArmRealEnv:
         obs["state"] = np.concatenate([obs["joint_position"], obs["gripper_position"]])
 
         # Include camera observations if available
-        print("[DEBUG] Reading camera images...")
+        # print("[DEBUG] Reading camera images...")
         for name, camera in self.camera_dict.items():
             image, depth = camera.read()
             obs[f"{name}_rgb"] = image
             obs[f"{name}_depth"] = depth
-        print("[DEBUG] Camera images read successfully.")
+        # print("[DEBUG] Camera images read successfully.")
         return obs
     
     def get_frames(self):
@@ -145,8 +145,8 @@ class XArmRealEnv:
 
         # Convert to degrees for printing
         joint_action_deg = np.round(np.degrees(joint_action), 2)
-        print(f"[STEP] Joint action: {joint_action}, Gripper action: {gripper_action}")
-        print(f"[STEP] Joint action (deg): {joint_action_deg}, Gripper action: {gripper_action:.3f}")
+        # print(f"[STEP] Joint action: {joint_action}, Gripper action: {gripper_action}")
+        # print(f"[STEP] Joint action (deg): {joint_action_deg}, Gripper action: {gripper_action:.3f}")
         self.arm.set_servo_angle_j(joint_action, is_radian=True, wait=False)
         self.gripper.send_gripper_command(gripper_action)
         # self.arm.set_gripper_position(gripper_mm, wait=False)
@@ -154,7 +154,7 @@ class XArmRealEnv:
     def step_through_interpolated_trajectory(self,
         trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions, save
     ):
-        print(f"[INFO] Interpolation created {len(trajectory)} steps.")
+        # print(f"[INFO] Interpolation created {len(trajectory)} steps.")
 
         for i, interpolated_action in enumerate(trajectory):
             start_time = time.time()
@@ -185,7 +185,7 @@ class XArmRealEnv:
                 obs_to_save = copy.deepcopy(obs)
                 self.save_step_data(log_dir, step_idx, obs_to_save, interpolated_action)
             self.step(np.array(interpolated_action))
-            print(f"interpolated_action: {np.round(np.degrees(interpolated_action[:6]), 2)} deg | Gripper: {interpolated_action[-1]:.3f}")
+            # print(f"interpolated_action: {np.round(np.degrees(interpolated_action[:6]), 2)} deg | Gripper: {interpolated_action[-1]:.3f}")
 
             elapsed = time.time() - start_time
             time.sleep(max(0.0, (1.0 / control_hz) - elapsed))

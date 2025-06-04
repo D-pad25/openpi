@@ -40,7 +40,7 @@ class GripperSocketBridge:
                 if not data:
                     break
                 message = data.decode().strip()
-                print(f"[📥] Received: '{message}'")
+                # print(f"[📥] Received: '{message}'")
 
                 if message.startswith("SET:"):
                     try:
