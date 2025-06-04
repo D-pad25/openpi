@@ -1,22 +1,46 @@
 import socket
-import time
 
-def send_gripper_command(value: float):
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
-            client.connect(('127.0.0.1', 12345))
-            message = f"{value:.3f}\n"
-            client.sendall(message.encode())
+class GripperClient:
+    def __init__(self, host='127.0.0.1', port=12345):
+        self.host = host
+        self.port = port
+        self.sock = None
 
-            response = client.recv(1024).decode()
-            print(f"[Client] Sent: {message.strip()} | Received: {response.strip()}")
+    def connect(self):
+        if self.sock is None:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.connect((self.host, self.port))
+            print("[Client] Connected to gripper server")
 
-    except Exception as e:
-        print(f"[Client Error] {e}")
+    def send_gripper_command(self, value: float):
+        try:
+            self.connect()
+            command = f"SET:{value:.3f}\n"
+            self.sock.sendall(command.encode())
+            print(f"[Client] Sent gripper command: {value:.3f}")
+        except Exception as e:
+            print(f"[Client Error] send: {e}")
 
+    def receive_gripper_position(self):
+        try:
+            self.connect()
+            self.sock.sendall(b"GET\n")
+            response = self.sock.recv(1024).decode().strip()
+            print(f"[Client] Received gripper state: {response}")
+            return response
+        except Exception as e:
+            print(f"[Client Error] receive: {e}")
+            return None
+
+    def close(self):
+        if self.sock:
+            self.sock.close()
+            self.sock = None
+            print("[Client] Disconnected")
+
+# Example usage
 if __name__ == "__main__":
-    commands = [0.0, 0.25, 0.5, 0.75, 1.0, 0.0]
-
-    for cmd in commands:
-        send_gripper_command(cmd)
-        time.sleep(1)  # ⏱️ Wait 1 second between commands
+    client = GripperClient()
+    client.send_gripper_command(0.5)
+    client.receive_gripper_position()
+    client.close()
