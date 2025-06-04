@@ -20,13 +20,13 @@ class GripperClient:
         if self.sock is None:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.connect((self.host, self.send_gripper_port))
-            print("[Client] Connected to gripper server")
+            # print("[Client] Connected to gripper server")
 
     def close(self):
         if self.sock:
             self.sock.close()
             self.sock = None
-            print("[Client] Disconnected")
+            # print("[Client] Disconnected")
 
     def send_command(self, message: str) -> str:
         """Send raw command and get response."""
@@ -41,11 +41,11 @@ class GripperClient:
 
     def send_gripper_command(self, value: float):
         response = self.send_command(f"SET:{value:.3f}")
-        print(f"[Client] Sent gripper command: {value:.3f} | Server: {response}")
+        # print(f"[Client] Sent gripper command: {value:.3f} | Server: {response}")
 
     def receive_gripper_position(self):
         response = self.send_command("GET")
-        print(f"[Client] Gripper state: {response}")
+        # print(f"[Client] Gripper state: {response}")
         return response
 
 
@@ -71,7 +71,7 @@ class XArmRealEnv:
     def _get_normalized_gripper_position(self) -> float:
         """Returns the gripper position as a normalized float in [0.0, 1.0]."""
         raw_response = self.gripper.receive_gripper_position()
-        print(f"[DEBUG] Raw gripper response: '{raw_response}'")
+        # print(f"[DEBUG] Raw gripper response: '{raw_response}'")
         try:
             return max(0.0, min(1.0, float(raw_response) / 255.0))  # Normalize to [0, 1]
         except Exception:

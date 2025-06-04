@@ -69,9 +69,9 @@ def main(
     
     for step_idx in range(max_steps):
         start_time = time.time()
-        print(f"[INFO] Step {step_idx+1}/{max_steps} - Getting observation...")
+        # print(f"[INFO] Step {step_idx+1}/{max_steps} - Getting observation...")
         obs = env.get_observation()
-        print(f"[INFO] Step {step_idx+1}/{max_steps} - Observations received.")
+        # print(f"[INFO] Step {step_idx+1}/{max_steps} - Observations received.")
         # Get new action_chunk if empty or 25 steps have passed
         if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= 25:
             # pad images as per policy requirements
@@ -145,7 +145,7 @@ def main(
 
 
         if not step_through_instructions and np.any(np.abs(delta_deg) > delta_threshold):
-            print(f"[INFO] Large delta detected (>{delta_threshold} deg). Requesting new action chunk.")
+            # print(f"[INFO] Large delta detected (>{delta_threshold} deg). Requesting new action chunk.")
             # Convert current and action joints to radians for interpolation
             state = np.concatenate([obs["joint_position"], obs["gripper_position"]])
             # Interpolate trajectory if delta exceeds threshold
