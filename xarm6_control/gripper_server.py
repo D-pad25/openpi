@@ -5,7 +5,7 @@ import rospy
 from std_msgs.msg import Int16, Float32
 
 class GripperSocketBridge:
-    def __init__(self, host='127.0.0.1', port=12345):
+    def __init__(self, host='127.0.0.1', port=22345):
         self.pub = rospy.Publisher('/gripper_command', Int16, queue_size=10)
         self.latest_gripper_pos = None
         self._lock = threading.Lock()
