@@ -43,7 +43,16 @@ class GripperClient:
 # Example usage
 if __name__ == "__main__":
     client = GripperClient()
-    # client.send_gripper_command(0.5)
-    time.sleep(1)  # Allow time for server to process
-    client.receive_gripper_position()
-    client.close()
+
+    try:
+        command_values = [0.0, 0.25, 0.5, 0.75, 1.0, 0.0]
+
+        for val in command_values:
+            client.send_gripper_command(val)
+            time.sleep(0.5)  # Small delay to allow ROS to process
+            client.receive_gripper_position()
+            print("-" * 40)
+            time.sleep(0.5)  # Optional: delay before next command
+
+    finally:
+        client.close()

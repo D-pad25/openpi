@@ -21,7 +21,6 @@ class GripperSocketBridge:
     def _gripper_callback(self, msg):
         with self._lock:
             self.latest_gripper_pos = msg.data
-        print(f"[🔄] Received gripper state update: {msg.data}")
 
     def socket_server_loop(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
