@@ -11,7 +11,7 @@ import socket
 
 
 class GripperClient:
-    def __init__(self, host='127.0.0.1', port=22345):
+    def __init__(self, host='127.0.0.1', port=12345):
         self.host = host
         self.send_gripper_port = port
         self.sock = None
