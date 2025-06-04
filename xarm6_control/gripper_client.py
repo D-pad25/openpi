@@ -15,7 +15,7 @@ def send_gripper_command(value: float):
         print(f"[Client Error] {e}")
 
 if __name__ == "__main__":
-    commands = [0.0, 0.25, 0.5, 0.75, 1.0]
+    commands = [0.0, 0.25, 0.5, 0.75, 1.0, 0.0]
 
     for cmd in commands:
         send_gripper_command(cmd)
