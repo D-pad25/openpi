@@ -72,8 +72,12 @@ class XArmRealEnv:
         """Returns the gripper position as a normalized float in [0.0, 1.0]."""
         raw_response = self.gripper.receive_gripper_position()
         try:
-            value = float(raw_response.strip())
-            return max(0.0, min(1.0, value))
+            if raw_response.startswith("STATE:"):
+                value = float(raw_response.split(":", 1)[1].strip())
+                return max(0.0, min(1.0, value / 255.0))  # Normalize to [0, 1]
+            else:
+                print(f"[WARN] Unexpected gripper state format: '{raw_response}'")
+                return 0.0
         except Exception:
             print(f"[WARN] Failed to parse gripper state: '{raw_response}'")
             return 0.0
