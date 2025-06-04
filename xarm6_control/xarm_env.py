@@ -13,13 +13,13 @@ import socket
 class GripperClient:
     def __init__(self, host='127.0.0.1', port=22345):
         self.host = host
-        self.port = port
+        self.send_gripper_port = port
         self.sock = None
 
     def connect(self):
         if self.sock is None:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.connect((self.host, self.port))
+            self.sock.connect((self.host, self.send_gripper_port))
             print("[Client] Connected to gripper server")
 
     def close(self):
