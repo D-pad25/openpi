@@ -7,34 +7,47 @@ import time
 import pickle
 from xarm.wrapper import XArmAPI
 import datetime
+import socket
 
 
-# Force local loopback for ROS comms to avoid DNS/hostname issues
-os.environ["ROS_HOSTNAME"] = "localhost"
-os.environ["ROS_MASTER_URI"] = "http://localhost:11311"
+class GripperClient:
+    def __init__(self, host='127.0.0.1', port=12345):
+        self.host = host
+        self.port = port
+        self.sock = None
 
-import rospy
-import std_msgs.msg
+    def connect(self):
+        if self.sock is None:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.connect((self.host, self.port))
+            print("[Client] Connected to gripper server")
 
-import rosgraph
+    def close(self):
+        if self.sock:
+            self.sock.close()
+            self.sock = None
+            print("[Client] Disconnected")
 
+    def send_command(self, message: str) -> str:
+        """Send raw command and get response."""
+        try:
+            self.connect()
+            self.sock.sendall(f"{message.strip()}\n".encode())
+            response = self.sock.recv(1024).decode().strip()
+            return response
+        except Exception as e:
+            print(f"[Client Error] {e}")
+            return "ERROR"
 
+    def send_gripper_command(self, value: float):
+        response = self.send_command(f"SET:{value:.3f}")
+        print(f"[Client] Sent gripper command: {value:.3f} | Server: {response}")
 
-# JOINT_LIMITS = {
-#     "lower": np.radians([-360, -118, -225, -360,  97, -360]),
-#     "upper": np.radians([ 360,  120,   11,  360, 180,  360])
-# }
+    def receive_gripper_position(self):
+        response = self.send_command("GET")
+        print(f"[Client] Gripper state: {response}")
+        return response
 
-class GripperPoseSubscriber:
-    def __init__(self):
-        self._gripper_pos = None
-        rospy.Subscriber('/gripper_position', std_msgs.msg.Float32, self._callback)
-
-    def _callback(self, msg):
-        self._gripper_pos = msg.data
-
-    def get_latest_position(self):
-        return self._gripper_pos
 
 class XArmRealEnv:
     def __init__(self, ip="192.168.1.203", camera_dict=None):
@@ -42,7 +55,7 @@ class XArmRealEnv:
         print(f"Connecting to xArm at {ip}...")
         self._initialize_arm()
         print("xArm connected and initialized.")
-        self._init_gripper_communication()
+        self.gripper = GripperClient()
         self.camera_dict = camera_dict or {}
 
     def _initialize_arm(self):
@@ -53,54 +66,16 @@ class XArmRealEnv:
         self.arm.set_collision_sensitivity(0)
         self.arm.set_state(state=0)
 
-    # def _init_gripper_communication(self):
-    #     print("Initializing gripper communication...")
-    #     rospy.init_node('xarm_gripper_node', anonymous=True)
-    #     self.gripper_pose_sub = GripperPoseSubscriber()
-    #     self.gripper_pose_pub = rospy.Publisher('/gripper_command', std_msgs.msg.Int16, queue_size=10)
-    #     print("Gripper communication initialized. Waiting for gripper position...")
-    def _init_gripper_communication(self):
-        print("🔧 Initializing gripper communication...")
-
-        if not rosgraph.is_master_online():
-            print("❌ ROS master is NOT running. Start it with: roscore")
-            exit(1)
-        print("📡 ROS master is online — initializing node...")
-
-        try:
-            rospy.init_node(f'xarm_gripper_node_{os.getpid()}', anonymous=True)
-            print("✅ Node initialized!")
-        except Exception as e:
-            print(f"[ERROR] Failed to initialize node: {e}")
-            exit(1)
-
-        self.gripper_pose_sub = GripperPoseSubscriber()
-        self.gripper_pose_pub = rospy.Publisher('/gripper_command', std_msgs.msg.Int16, queue_size=10)
-        print("📬 Gripper communication setup complete.")
-
     def _get_normalized_gripper_position(self) -> float:
         """Returns the gripper position as a normalized float in [0.0, 1.0]."""
-        raw_gripper_pos = self.gripper_pose_sub.get_latest_position()
+        raw_response = self.gripper.receive_gripper_position()
         try:
-            return max(0.0, min(1.0, float(raw_gripper_pos) / 255.0))
+            value = float(raw_response.strip())
+            return max(0.0, min(1.0, value))
         except Exception:
-            rospy.logwarn(f"Invalid gripper pose received: {raw_gripper_pos}")
+            print(f"[WARN] Failed to parse gripper state: '{raw_response}'")
             return 0.0
-
-    def _publish_gripper_command(self, normalized_pos: float):
-        """
-        Publishes a gripper command via ROS.
-
-        Args:
-            normalized_pos: Normalized gripper command in range [0.0, 1.0]
-        """
-        # Scale normalized input [0.0, 1.0] to [0, 200]
-        scaled_value = max(0, min(200, int(round(normalized_pos * 200))))
-        # print(f'sending messagee {scaled_value}')
-        # Create and publish message
-        msg = std_msgs.msg.Int16()
-        msg.data = scaled_value
-        self.gripper_pose_pub.publish(msg)
+        
 
     def _get_joint_position(self):
         code, joint_position = self.arm.get_servo_angle(is_radian=True)
@@ -169,7 +144,7 @@ class XArmRealEnv:
         print(f"[STEP] Joint action: {joint_action}, Gripper action: {gripper_action}")
         print(f"[STEP] Joint action (deg): {joint_action_deg}, Gripper action: {gripper_action:.3f}")
         self.arm.set_servo_angle_j(joint_action, is_radian=True, wait=False)
-        self._publish_gripper_command(gripper_action)
+        self.gripper.send_gripper_command(gripper_action)
         # self.arm.set_gripper_position(gripper_mm, wait=False)
     
     def step_through_interpolated_trajectory(self,

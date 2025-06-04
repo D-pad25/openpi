@@ -57,7 +57,7 @@ class GripperSocketBridge:
                     with self._lock:
                         pos = self.latest_gripper_pos
                     if pos is not None:
-                        client_socket.sendall(f"STATE: {pos}\n".encode())
+                        client_socket.sendall(f"{pos}\n".encode())
                     else:
                         client_socket.sendall(b"STATE: unavailable\n")
 
