@@ -1,3 +1,5 @@
+import socket
+
 class GripperClient:
     def __init__(self, host='127.0.0.1', port=12345):
         self.host = host
@@ -35,3 +37,11 @@ class GripperClient:
         response = self.send_command("GET")
         print(f"[Client] Gripper state: {response}")
         return response
+
+
+# Example usage
+if __name__ == "__main__":
+    client = GripperClient()
+    client.send_gripper_command(0.5)
+    client.receive_gripper_position()
+    client.close()
