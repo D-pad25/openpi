@@ -71,6 +71,7 @@ class XArmRealEnv:
     def _get_normalized_gripper_position(self) -> float:
         """Returns the gripper position as a normalized float in [0.0, 1.0]."""
         raw_response = self.gripper.receive_gripper_position()
+        print(f"[DEBUG] Raw gripper response: '{raw_response}'")
         try:
             return max(0.0, min(1.0, float(raw_response) / 255.0))  # Normalize to [0, 1]
         except Exception:
@@ -89,7 +90,8 @@ class XArmRealEnv:
     def get_observation(self):
         joint_position = self._get_joint_position()
         gripper_position = self._get_normalized_gripper_position()
-
+        print(f"[DEBUG] Joint position: {joint_position}")
+        print(f"[DEBUG] Gripper position: {gripper_position:.3f}")
         obs = {
             "joint_position": np.array(joint_position[:6]),  # Keep only 6 joints
             "gripper_position": np.array([gripper_position]),
@@ -99,6 +101,7 @@ class XArmRealEnv:
         obs["state"] = np.concatenate([obs["joint_position"], obs["gripper_position"]])
 
         # Include camera observations if available
+        print("[DEBUG] Reading camera images...")
         for name, camera in self.camera_dict.items():
             image, depth = camera.read()
             obs[f"{name}_rgb"] = image
