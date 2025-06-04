@@ -2,7 +2,7 @@
 import socket
 import threading
 import rospy
-from std_msgs.msg import Int16
+from std_msgs.msg import Int16, Float32
 
 class GripperSocketBridge:
     def __init__(self, host='127.0.0.1', port=12345):
@@ -10,8 +10,8 @@ class GripperSocketBridge:
         self.latest_gripper_pos = None
         self._lock = threading.Lock()
 
-        # Still assuming gripper feedback is Float32
-        rospy.Subscriber('/gripper_position', Int16, self._gripper_callback)
+        # Subscribe to gripper state (Float32)
+        rospy.Subscriber('/gripper_position', Float32, self._gripper_callback)
 
         self.server_address = (host, port)
         self.server_thread = threading.Thread(target=self.socket_server_loop, daemon=True)
@@ -21,6 +21,7 @@ class GripperSocketBridge:
     def _gripper_callback(self, msg):
         with self._lock:
             self.latest_gripper_pos = msg.data
+        print(f"[🔄] Received gripper state update: {msg.data}")
 
     def socket_server_loop(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
