@@ -106,7 +106,7 @@ class XArmRealEnv:
             image, depth = camera.read()
             obs[f"{name}_rgb"] = image
             obs[f"{name}_depth"] = depth
-
+        print("[DEBUG] Camera images read successfully.")
         return obs
     
     def get_frames(self):
