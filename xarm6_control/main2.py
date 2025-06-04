@@ -52,6 +52,7 @@ def main(
             "wrist": ZMQClientCamera(port=wrist_camera_port, host=remote_host),
             "base": ZMQClientCamera(port=base_camera_port, host=remote_host),
         }
+        print
         env = XArmRealEnv(camera_dict=camera_clients)
     print("Attempting to connect to server...")
     # Connect to the policy server
@@ -68,7 +69,9 @@ def main(
     
     for step_idx in range(max_steps):
         start_time = time.time()
+        print(f"[INFO] Step {step_idx+1}/{max_steps} - Getting observation...")
         obs = env.get_observation()
+        print(f"[INFO] Step {step_idx+1}/{max_steps} - Observations received.")
         # Get new action_chunk if empty or 25 steps have passed
         if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= 25:
             # pad images as per policy requirements
