@@ -55,7 +55,9 @@ class XArmRealEnv:
         print(f"Connecting to xArm at {ip}...")
         self._initialize_arm()
         print("xArm connected and initialized.")
+        print("Setting up gripper client...")
         self.gripper = GripperClient()
+        print("Gripper client initialized.")
         self.camera_dict = camera_dict or {}
 
     def _initialize_arm(self):
