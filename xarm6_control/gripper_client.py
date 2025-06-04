@@ -1,4 +1,5 @@
 import socket
+import time
 
 class GripperClient:
     def __init__(self, host='127.0.0.1', port=12345):
@@ -42,6 +43,7 @@ class GripperClient:
 # Example usage
 if __name__ == "__main__":
     client = GripperClient()
-    client.send_gripper_command(0.5)
+    # client.send_gripper_command(0.5)
+    time.sleep(1)  # Allow time for server to process
     client.receive_gripper_position()
     client.close()
