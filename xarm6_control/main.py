@@ -1,5 +1,6 @@
 # main.py
 
+import sys
 import time
 import tyro
 import copy
@@ -135,7 +136,7 @@ def main(
                         cmd = input("Press [Enter] to execute, 's' to skip, or 'q' to quit: ").strip().lower()
                         if cmd == "q":
                             print("Exiting policy execution.")
-                            exit()  # Ensures entire script exits cleanly
+                            sys.exit()  # Ensures entire script exits cleanly
                         elif cmd == "s":
                             print("Skipping this step.")
                             continue
