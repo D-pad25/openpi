@@ -29,7 +29,7 @@ def main(
     delta_threshold: float = 0.25,  # New argument for delta threshold
     log_dir: str = "/media/acrv/DanielsSSD/VLA_data",
     # log_dir: str = os.path.expanduser("~/test_logs"),
-    save: bool = True,  # New argument to control saving behavior
+    save: bool = False,  # New argument to control saving behavior
 ):
     # Create a log directory if it doesn't exist
     if save:
