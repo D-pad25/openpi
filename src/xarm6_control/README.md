@@ -2,6 +2,8 @@
 
 This module provides real-time control and observation utilities for the xArm6 robot, enabling integration with OpenPI Vision-Language-Action (VLA) policies. It allows the xArm6 to run inference-based actions from pre-trained models using real sensor inputs and live camera feeds.
 
+---
+
 ## 🔧 Features
 
 - Retrieve joint states and camera observations from the xArm6 robot
@@ -9,38 +11,54 @@ This module provides real-time control and observation utilities for the xArm6 r
 - Send actions to the xArm6 controller via `position`, `velocity`, or `servo` mode
 - Support for real-world deployment and debug-friendly logging
 
+---
 
-## Get the policy running
-1. Get the server up on running on the HPC
-1.1 Activate the virtual enviroment
+## 🚀 Running a Policy on xArm6
+
+### 1. Run the Policy Server on the HPC
+
+#### 1.1 Activate the virtual environment
+
 ```bash
 source .venv/bin/activate
 ```
 
-1.2 Export the cache location to access checkpoints etc.
+#### 1.2 Export the cache location to access checkpoints etc.
+
 ```bash
 export OPENPI_DATA_HOME=$HOME/.cache/openpi 
 ```
  
-1.3 Run the policy. Note that the configuration (checkpoints, norm stats etc.) are governed by the --env key
+#### 1.3 Run the policy. Note that the configuration (checkpoints, norm stats etc.) are governed by the --env key
+
 ```bash
 uv run scripts/serve_policy.py --env XARM --port 8000
 ```
 
-2. Set up SSH tunnel from client to the HPC server node
+### 2. Set up SSH tunnel from client to the HPC server node
+
 ```bash
 ssh -L 8000:10.13.22.1:8000 n10813934@aqua.qut.edu.au
 ```
 
-3. Run the client (make relative path)
-3.1 Set up enviroment
+### 3. Run the client (make relative path)
+
+#### 3.1 Set up enviroment
+
 ```bash
 source .venv/bin/activate
 source /opt/ros/noetic/setup.bash
 export PYTHONPATH=$PYTHONPATH:/opt/ros/noetic/lib/python3/dist-packages
 ```
 
-3.2 Run the script (refferencing local dir and rospy)
+#### 3.2 (a) Run the script (refferencing local dir and rospy)
+
 ```bash
 PYTHONPATH=.:/opt/ros/noetic/lib/python3/dist-packages uv run xarm6_control/main2.py --remote_host localhost --remote_port 8000
+```
+
+#### 3.2 (b) You should be able to just run this now
+
+```bash
+uv run xarm6_control/main2.py --remote_host localhost --remote_port 8000
 ```
