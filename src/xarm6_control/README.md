@@ -17,19 +17,25 @@ This module provides real-time control and observation utilities for the xArm6 r
 
 ### 1. Run the Policy Server on the HPC
 
-#### 1.1 Activate the virtual environment
+#### 1.1 ssh into the HPC
+
+'''bash
+ssh n10813934@aqua.qut.edu.au
+'''
+
+#### 1.2 Activate the virtual environment
 
 ```bash
 source .venv/bin/activate
 ```
 
-#### 1.2 Export the cache location to access checkpoints etc.
+#### 1.3 Export the cache location to access checkpoints etc.
 
 ```bash
 export OPENPI_DATA_HOME=$HOME/.cache/openpi 
 ```
  
-#### 1.3 Run the policy. Note that the configuration (checkpoints, norm stats etc.) are governed by the --env key
+#### 1.4 Run the policy. Note that the configuration (checkpoints, norm stats etc.) are governed by the --env key
 
 ```bash
 uv run scripts/serve_policy.py --env XARM --port 8000
@@ -44,6 +50,9 @@ ssh -L 8000:10.13.22.1:8000 n10813934@aqua.qut.edu.au
 ### 3. Run the client (make relative path)
 
 #### 3.1 Set up enviroment
+
+This step activates the local Python environment and configures ROS Noetic support.  
+It ensures that ROS-related Python modules (e.g., `rospy`) are accessible, and that the workspace is correctly set up for ROS-integrated inference and control.
 
 ```bash
 source .venv/bin/activate
