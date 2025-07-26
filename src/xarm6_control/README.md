@@ -19,9 +19,9 @@ This module provides real-time control and observation utilities for the xArm6 r
 
 #### 1.1 ssh into the HPC
 
-'''bash
+```bash
 ssh n10813934@aqua.qut.edu.au
-'''
+```
 
 #### 1.2 Activate the virtual environment
 
