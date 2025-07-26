@@ -62,9 +62,8 @@ export PYTHONPATH=$PYTHONPATH:/opt/ros/noetic/lib/python3/dist-packages
 
 #### 3.2 Run the gripper server
 
-> **Note:** I need to test the `gripper_server_async`.  
-> When testing this, make sure to also change which class is referenced in `xarm_env.py`.
-
+> * **Note:** I need to test the `gripper_server_async`.  
+> - When testing this, make sure to also change which class is referenced in `xarm_env.py`.
 
 ```bash
 uv run src/xarm6_control/gripper_server
