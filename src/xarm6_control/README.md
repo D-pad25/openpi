@@ -60,14 +60,22 @@ source /opt/ros/noetic/setup.bash
 export PYTHONPATH=$PYTHONPATH:/opt/ros/noetic/lib/python3/dist-packages
 ```
 
+#### 3.2 Run the gripper server
+
+Note: I need to test the gripper_server_async (when testing this, make sure to also change which the class referenced in xarm_env.py)
+
+```bash
+uv run src/xarm6_control/gripper_server
+```
+
 #### 3.2 (a) Run the script (refferencing local dir and rospy)
 
 ```bash
-PYTHONPATH=.:/opt/ros/noetic/lib/python3/dist-packages uv run xarm6_control/main2.py --remote_host localhost --remote_port 8000
+PYTHONPATH=.:/opt/ros/noetic/lib/python3/dist-packages uv run src/xarm6_control/main2.py --remote_host localhost --remote_port 8000
 ```
 
 #### 3.2 (b) You should be able to just run this now
 
 ```bash
-uv run xarm6_control/main2.py --remote_host localhost --remote_port 8000
+uv run src/xarm6_control/main2.py --remote_host localhost --remote_port 8000
 ```
