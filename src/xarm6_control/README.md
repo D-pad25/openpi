@@ -53,6 +53,7 @@ ssh -L 8000:10.13.22.1:8000 n10813934@aqua.qut.edu.au
 
 > - This step activates the local Python environment and configures ROS Noetic support.  
 > - It ensures that ROS-related Python modules (e.g., `rospy`) are accessible, and that the workspace is correctly set up for ROS-integrated inference and control.
+> - Need to test if we are still actually using the ros python stuff
 
 ```bash
 source .venv/bin/activate
@@ -69,13 +70,9 @@ export PYTHONPATH=$PYTHONPATH:/opt/ros/noetic/lib/python3/dist-packages
 uv run src/xarm6_control/gripper_server
 ```
 
-#### 3.2 (a) Run the script (refferencing local dir and rospy)
+#### 3.3 (a) Run the client script (refferencing local dir and rospy)
 
-```bash
-PYTHONPATH=.:/opt/ros/noetic/lib/python3/dist-packages uv run src/xarm6_control/main2.py --remote_host localhost --remote_port 8000
-```
-
-#### 3.2 (b) You should be able to just run this now
+> - **NOTE**: This used to be `PYTHONPATH=.:/opt/ros/noetic/lib/python3/dist-packages uv run src/xarm6_control/main2.py --remote_host localhost --remote_port 8000`, however, I changed it to the below. This needs to be tested. 
 
 ```bash
 uv run src/xarm6_control/main2.py --remote_host localhost --remote_port 8000
