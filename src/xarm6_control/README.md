@@ -51,8 +51,8 @@ ssh -L 8000:10.13.22.1:8000 n10813934@aqua.qut.edu.au
 
 #### 3.1 Set up enviroment
 
-- This step activates the local Python environment and configures ROS Noetic support.  
-- It ensures that ROS-related Python modules (e.g., `rospy`) are accessible, and that the workspace is correctly set up for ROS-integrated inference and control.
+> - This step activates the local Python environment and configures ROS Noetic support.  
+> - It ensures that ROS-related Python modules (e.g., `rospy`) are accessible, and that the workspace is correctly set up for ROS-integrated inference and control.
 
 ```bash
 source .venv/bin/activate
@@ -62,7 +62,7 @@ export PYTHONPATH=$PYTHONPATH:/opt/ros/noetic/lib/python3/dist-packages
 
 #### 3.2 Run the gripper server
 
-> * **Note:** I need to test the `gripper_server_async`.  
+> - **Note:** I need to test the `gripper_server_async`.  
 > - When testing this, make sure to also change which class is referenced in `xarm_env.py`.
 
 ```bash
