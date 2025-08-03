@@ -21,6 +21,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from attn_weights import MultiHeadDotProductAttention
+
 import openpi.training.sharding as sharding
 
 
@@ -109,6 +111,44 @@ class Encoder1DBlock(nn.Module):
         return x, out
 '''
 class Encoder1DBlock(nn.Module):
+    """Single transformer encoder block (MHSA + MLP)."""
+
+    mlp_dim: int | None = None  # Defaults to 4x input dim
+    num_heads: int = 12
+    dropout: float = 0.0
+    dtype_mm: str = "float32"
+
+    @nn.compact
+    def __call__(self, x, deterministic=True):  # noqa: FBT002
+        out = {}
+        x = sharding.activation_sharding_constraint(x)
+        y = nn.LayerNorm(dtype=self.dtype_mm)(x)
+        y, attn_weights = MultiHeadDotProductAttention(
+            num_heads=self.num_heads,
+            kernel_init=nn.initializers.xavier_uniform(),
+            deterministic=deterministic,
+            dtype=self.dtype_mm,
+        )(y, y)
+        out["sa"] = y
+        out["attn_weights"] = attn_weights
+        y = sharding.activation_sharding_constraint(y)
+        y = nn.Dropout(rate=self.dropout)(y, deterministic)
+        x = out["+sa"] = x + y
+
+        y = nn.LayerNorm(dtype=self.dtype_mm)(x)
+        y = out["mlp"] = MlpBlock(
+            mlp_dim=self.mlp_dim,
+            dropout=self.dropout,
+            dtype_mm=self.dtype_mm,
+        )(y, deterministic)
+        y = sharding.activation_sharding_constraint(y)
+        y = nn.Dropout(rate=self.dropout)(y, deterministic)
+        x = out["+mlp"] = x + y
+        x = sharding.activation_sharding_constraint(x)
+        return x, out
+
+'''
+class Encoder1DBlock(nn.Module):
     mlp_dim: int | None = None  # Defaults to 4x input dim
     num_heads: int = 12
     dropout: float = 0.0
@@ -153,7 +193,7 @@ class Encoder1DBlock(nn.Module):
         x = sharding.activation_sharding_constraint(x)
 
         return x, out
-
+'''
 
 
 class Encoder(nn.Module):

@@ -6,6 +6,8 @@ import flax.nnx as nnx
 import flax.nnx.bridge as nnx_bridge
 import jax
 import jax.numpy as jnp
+import numpy as np
+
 from typing_extensions import override
 
 from openpi.models import model as _model
@@ -174,15 +176,30 @@ class Pi0(_model.BaseModel):
     @at.typecheck
     def embed_prefix(
         self, obs: _model.Observation
-    ) -> tuple[at.Float[at.Array, "b s emb"], at.Bool[at.Array, "b s"], at.Bool[at.Array, " s"]]:
+    ) -> tuple[
+        at.Float[at.Array, "b s emb"],        # tokens
+        at.Bool[at.Array, "b s"],             # input_mask
+        at.Bool[at.Array, " s"],              # ar_mask
+        dict[str, dict[str, np.ndarray]]      # all_attn_weights
+    ]:
         input_mask = []
         ar_mask = []
         tokens = []
+        all_attn_weights = {}
         # embed images
         for name in obs.images:
-            image_tokens, _ = self.PaliGemma.img(obs.images[name], train=False)
+            image_tokens, out = self.PaliGemma.img(obs.images[name], train=False)
 
-            attn_weights = self.PaliGemma.img.intermediates.get("attention_weights", None)
+            # Access and save all attention weights for this image
+            depth = self.PaliGemma.img.module.depth  # number of transformer blocks
+            image_attn = {
+                f"block{l:02d}": np.array(out["encoder"][f"block{l:02d}"]["attn_weights"])
+                for l in range(depth)
+            }
+
+            all_attn_weights[name] = image_attn
+
+            # attn_weights = self.PaliGemma.img.intermediates.get("attention_weights", None)
             tokens.append(image_tokens)
             input_mask.append(
                 einops.repeat(
@@ -204,7 +221,7 @@ class Pi0(_model.BaseModel):
         tokens = jnp.concatenate(tokens, axis=1)
         input_mask = jnp.concatenate(input_mask, axis=1)
         ar_mask = jnp.array(ar_mask)
-        return tokens, input_mask, ar_mask, attn_weights
+        return tokens, input_mask, ar_mask, all_attn_weights
 
     @at.typecheck
     def embed_suffix(
@@ -253,7 +270,7 @@ class Pi0(_model.BaseModel):
         u_t = noise - actions
 
         # one big forward pass of prefix + suffix at once
-        prefix_tokens, prefix_mask, prefix_ar_mask, attn_weights = self.embed_prefix(observation)
+        prefix_tokens, prefix_mask, prefix_ar_mask, out = self.embed_prefix(observation)
         suffix_tokens, suffix_mask, suffix_ar_mask = self.embed_suffix(observation, x_t, time)
         input_mask = jnp.concatenate([prefix_mask, suffix_mask], axis=1)
         ar_mask = jnp.concatenate([prefix_ar_mask, suffix_ar_mask], axis=0)
@@ -273,7 +290,7 @@ class Pi0(_model.BaseModel):
         observation: _model.Observation,
         *,
         num_steps: int | at.Int[at.Array, ""] = 10,
-    ) -> _model.Actions:
+    ) -> tuple[_model.Actions, dict[str, dict[str, np.ndarray]]]:
         observation = _model.preprocess_observation(None, observation, train=False)
         # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
         # distribution. yes, this is the opposite of the pi0 paper, and I'm sorry.
@@ -283,14 +300,6 @@ class Pi0(_model.BaseModel):
 
         # first fill KV cache with a forward pass of the prefix
         prefix_tokens, prefix_mask, prefix_ar_mask, attn_weights = self.embed_prefix(observation)
-
-        # If attention weights are available, store them for later use
-        # This is useful for debugging or analysis purposes.
-        if attn_weights is not None:
-            # Store attention weights for later use
-            self._last_attn_weights = attn_weights
-        else:
-            self._last_attn_weights = None
             
         prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
         positions = jnp.cumsum(prefix_mask, axis=1) - 1
