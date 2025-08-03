@@ -109,7 +109,11 @@ class Encoder1DBlock(nn.Module):
         return x, out
 '''
 class Encoder1DBlock(nn.Module):
-    ...
+    mlp_dim: int | None = None  # Defaults to 4x input dim
+    num_heads: int = 12
+    dropout: float = 0.0
+    dtype_mm: str = "float32"
+    
     @nn.compact
     def __call__(self, x, deterministic=True):
         out = {}
