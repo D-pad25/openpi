@@ -182,6 +182,7 @@ class Pi0(_model.BaseModel):
         for name in obs.images:
             image_tokens, _ = self.PaliGemma.img(obs.images[name], train=False)
 
+            attn_weights = self.PaliGemma.img.intermediates.get("attention_weights", None)
             tokens.append(image_tokens)
             input_mask.append(
                 einops.repeat(
@@ -203,7 +204,7 @@ class Pi0(_model.BaseModel):
         tokens = jnp.concatenate(tokens, axis=1)
         input_mask = jnp.concatenate(input_mask, axis=1)
         ar_mask = jnp.array(ar_mask)
-        return tokens, input_mask, ar_mask
+        return tokens, input_mask, ar_mask, attn_weights
 
     @at.typecheck
     def embed_suffix(
@@ -252,7 +253,7 @@ class Pi0(_model.BaseModel):
         u_t = noise - actions
 
         # one big forward pass of prefix + suffix at once
-        prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
+        prefix_tokens, prefix_mask, prefix_ar_mask, attn_weights = self.embed_prefix(observation)
         suffix_tokens, suffix_mask, suffix_ar_mask = self.embed_suffix(observation, x_t, time)
         input_mask = jnp.concatenate([prefix_mask, suffix_mask], axis=1)
         ar_mask = jnp.concatenate([prefix_ar_mask, suffix_ar_mask], axis=0)
@@ -281,7 +282,16 @@ class Pi0(_model.BaseModel):
         noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
 
         # first fill KV cache with a forward pass of the prefix
-        prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
+        prefix_tokens, prefix_mask, prefix_ar_mask, attn_weights = self.embed_prefix(observation)
+
+        # If attention weights are available, store them for later use
+        # This is useful for debugging or analysis purposes.
+        if attn_weights is not None:
+            # Store attention weights for later use
+            self._last_attn_weights = attn_weights
+        else:
+            self._last_attn_weights = None
+            
         prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
         positions = jnp.cumsum(prefix_mask, axis=1) - 1
         _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
@@ -322,4 +332,4 @@ class Pi0(_model.BaseModel):
             return time >= -dt / 2
 
         x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
-        return x_0
+        return x_0, attn_weights

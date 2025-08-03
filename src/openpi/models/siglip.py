@@ -72,6 +72,7 @@ class MlpBlock(nn.Module):
         return nn.Dense(d, dtype=self.dtype_mm, **inits)(x)
 
 
+'''
 class Encoder1DBlock(nn.Module):
     """Single transformer encoder block (MHSA + MLP)."""
 
@@ -106,6 +107,49 @@ class Encoder1DBlock(nn.Module):
         x = out["+mlp"] = x + y
         x = sharding.activation_sharding_constraint(x)
         return x, out
+'''
+class Encoder1DBlock(nn.Module):
+    ...
+    @nn.compact
+    def __call__(self, x, deterministic=True):
+        out = {}
+        x = sharding.activation_sharding_constraint(x)
+
+        # Normalize input
+        y = nn.LayerNorm(dtype=self.dtype_mm)(x)
+
+        # Create attention module
+        attn_module = nn.MultiHeadDotProductAttention(
+            num_heads=self.num_heads,
+            kernel_init=nn.initializers.xavier_uniform(),
+            deterministic=deterministic,
+            dtype=self.dtype_mm,
+        )
+
+        # Run attention
+        y = attn_module(y, y)
+
+        # ✅ Always sow — Flax will only record it if 'intermediates' is mutable
+        self.sow("intermediates", "attention_weights", attn_module.attention_weights)
+
+        y = sharding.activation_sharding_constraint(y)
+        y = nn.Dropout(rate=self.dropout)(y, deterministic)
+        x = out["+sa"] = x + y
+
+        # Continue as before
+        y = nn.LayerNorm(dtype=self.dtype_mm)(x)
+        y = out["mlp"] = MlpBlock(
+            mlp_dim=self.mlp_dim,
+            dropout=self.dropout,
+            dtype_mm=self.dtype_mm,
+        )(y, deterministic)
+        y = sharding.activation_sharding_constraint(y)
+        y = nn.Dropout(rate=self.dropout)(y, deterministic)
+        x = out["+mlp"] = x + y
+        x = sharding.activation_sharding_constraint(x)
+
+        return x, out
+
 
 
 class Encoder(nn.Module):
