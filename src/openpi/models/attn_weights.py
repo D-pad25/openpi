@@ -1,6 +1,7 @@
 from flax.linen import Module, compact, DenseGeneral
 from flax.linen.attention import dot_product_attention_weights
-from flax.linen.dtypes import Dtype, PrecisionLike, promote_dtype
+from flax.linen.dtypes import Dtype, promote_dtype
+from flax.linen.linear import PrecisionLike
 from flax.linen.initializers import zeros, lecun_normal
 from flax.core.frozen_dict import FrozenDict
 from jax import lax
