@@ -21,7 +21,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from attn_weights import MultiHeadDotProductAttention
+from openpi.models.attn_weights import MultiHeadDotProductAttention
 
 import openpi.training.sharding as sharding
 
