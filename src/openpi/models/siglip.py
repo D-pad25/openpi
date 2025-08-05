@@ -123,16 +123,25 @@ class Encoder1DBlock(nn.Module):
         out = {}
         x = sharding.activation_sharding_constraint(x)
         y = nn.LayerNorm(dtype=self.dtype_mm)(x)
+        print("######################### 1st ###############################")
+        print("x.shape before residual:", x.shape)
+        print("y.shape before residual:", y.shape)
         y, attn_weights = MultiHeadDotProductAttention(
             num_heads=self.num_heads,
             kernel_init=nn.initializers.xavier_uniform(),
             deterministic=deterministic,
             dtype=self.dtype_mm,
         )(y, y)
+        print("######################### 2nd ###############################")
+        print("x.shape before residual:", x.shape)
+        print("y.shape before residual:", y.shape)
         out["sa"] = y
         out["attn_weights"] = attn_weights
         y = sharding.activation_sharding_constraint(y)
         y = nn.Dropout(rate=self.dropout)(y, deterministic)
+        print("######################### 3rd ###############################")
+        print("x.shape before residual:", x.shape)
+        print("y.shape before residual:", y.shape)
         x = out["+sa"] = x + y
 
         y = nn.LayerNorm(dtype=self.dtype_mm)(x)
