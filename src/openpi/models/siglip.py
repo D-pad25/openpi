@@ -173,6 +173,12 @@ class Encoder1DBlock(nn.Module):
         out = {}
         x = sharding.activation_sharding_constraint(x)
         y = nn.LayerNorm(dtype=self.dtype_mm)(x)
+
+        attn_weights = compute_attn_weights(query=y, key=y, value=y, 
+                                            deterministic=deterministic, dtype=self.dtype_mm)
+        out["attn_weights"] = attn_weights
+        print("shape of attn_weights:", attn_weights.shape)
+        
         y = out["sa"] = nn.MultiHeadDotProductAttention(
             num_heads=self.num_heads,
             kernel_init=nn.initializers.xavier_uniform(),
@@ -180,9 +186,6 @@ class Encoder1DBlock(nn.Module):
             dtype=self.dtype_mm,
         )(y, y)
 
-        attn_weights = compute_attn_weights(query=y, key=y, value=y, 
-                                            deterministic=deterministic, dtype=self.dtype_mm)
-        out["attn_weights"] = attn_weights
         y = sharding.activation_sharding_constraint(y)
         y = nn.Dropout(rate=self.dropout)(y, deterministic)
         x = out["+sa"] = x + y
