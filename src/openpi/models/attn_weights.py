@@ -141,3 +141,122 @@ class MultiHeadDotProductAttention(Module):
 
         # Return output and attention weights
         return out, attn_weights
+
+def compute_attn_weights(
+    query: Array,
+    key: Array,
+    value: Array,
+    bias: Array | None = None,
+    mask: Array | None = None,
+    broadcast_dropout: bool = True,
+    dropout_rng: PRNGKey | None = None,
+    dropout_rate: float = 0.0,
+    deterministic: bool = False,
+    dtype: Dtype | None = None,
+    precision: PrecisionLike = None,
+    module: Module | None = None,
+    force_fp32_for_softmax: bool = False,
+    einsum_dot_general: Callable[..., Array] | None = None,
+    qk_attn_weights_einsum: Callable[..., Array] | None = None,
+    attn_weights_value_einsum: Callable[..., Array] | None = None,
+):
+  """Computes dot-product attention given query, key, and value.
+
+  This is the core function for applying attention based on
+  https://arxiv.org/abs/1706.03762. It calculates the attention weights given
+  query and key and combines the values using the attention weights.
+
+  .. note::
+    ``query``, ``key``, ``value`` needn't have any batch dimensions.
+
+  Args:
+    query: queries for calculating attention with shape of ``[batch...,
+      q_length, num_heads, qk_depth_per_head]``.
+    key: keys for calculating attention with shape of ``[batch..., kv_length,
+      num_heads, qk_depth_per_head]``.
+    value: values to be used in attention with shape of ``[batch..., kv_length,
+      num_heads, v_depth_per_head]``.
+    bias: bias for the attention weights. This should be broadcastable to the
+      shape ``[batch..., num_heads, q_length, kv_length]``. This can be used for
+      incorporating causal masks, padding masks, proximity bias, etc.
+    mask: mask for the attention weights. This should be broadcastable to the
+      shape ``[batch..., num_heads, q_length, kv_length]``. This can be used for
+      incorporating causal masks. Attention weights are masked out if their
+      corresponding mask value is ``False``.
+    broadcast_dropout: bool: use a broadcasted dropout along batch dims.
+    dropout_rng: JAX PRNGKey: to be used for dropout
+    dropout_rate: dropout rate
+    deterministic: bool, deterministic or not (to apply dropout)
+    dtype: the dtype of the computation (default: infer from inputs)
+    precision: numerical precision of the computation see ``jax.lax.Precision`
+      for details.
+    module: the Module that will sow the attention weights into the
+      'intermediates' collection. Remember to mark 'intermediates' as mutable
+      via ``mutable=['intermediates']`` in order to have that collection
+      returned. If ``module`` is None, the attention weights will not be sowed.
+    force_fp32_for_softmax: bool, whether to force the softmax to be computed in
+      fp32. This is useful for mixed-precision training where higher precision
+      is desired for numerical stability.
+    einsum_dot_general: the dot_general to use in `jnp.einsum`.
+    qk_attn_weights_einsum: the einsum for computing the attention weights. When
+      unspecified, the default `jnp.einsum` will be used. This argument is
+      mutually exclusive with `precision` and `einsum_dot_general`.
+    attn_weights_value_einsum: the einsum for computing the product of the
+      attention weights and the values. When unspecified, the default
+      `jnp.einsum` will be used. This argument is mutually exclusive with
+      `precision` and `einsum_dot_general`.
+
+  Returns:
+    Output of shape ``[batch..., q_length, num_heads, v_depth_per_head]``.
+
+  Raises:
+    ValueError: if both `precision`/`einsum_dot_general` and
+    `qk_attn_weights_einsum`/`attn_weights_value_einsum` are
+      specified.
+  """
+  if (qk_attn_weights_einsum and not attn_weights_value_einsum) or (
+      not qk_attn_weights_einsum and attn_weights_value_einsum
+  ):
+    raise ValueError(
+        'qk_attn_weights_einsum and attn_weights_value_einsum must be specified'
+        ' together.'
+    )
+  if (precision or einsum_dot_general) and (
+      qk_attn_weights_einsum or attn_weights_value_einsum
+  ):
+    raise ValueError(
+        'precision/einsum_dot_general and'
+        ' qk_attn_weights_einsum/attn_weights_value_einsum are mutually'
+        ' exclusive. Please specify only one of them.'
+    )
+
+  query, key, value = promote_dtype(query, key, value, dtype=dtype)
+  dtype = query.dtype
+  assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
+  assert (
+    query.shape[:-3] == key.shape[:-3] == value.shape[:-3]
+  ), 'q, k, v batch dims must match.'
+  assert (
+    query.shape[-2] == key.shape[-2] == value.shape[-2]
+  ), 'q, k, v num_heads must match.'
+  assert key.shape[-3] == value.shape[-3], 'k, v lengths must match.'
+
+  # compute attention weights
+  attn_weights = dot_product_attention_weights(
+      query,
+      key,
+      bias,
+      mask,
+      broadcast_dropout,
+      dropout_rng,
+      dropout_rate,
+      deterministic,
+      dtype,
+      precision,
+      module,
+      force_fp32_for_softmax,
+      einsum_dot_general=einsum_dot_general,
+      einsum=qk_attn_weights_einsum,
+  )
+
+  return attn_weights
