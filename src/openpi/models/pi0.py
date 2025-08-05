@@ -180,7 +180,8 @@ class Pi0(_model.BaseModel):
         at.Float[at.Array, "b s emb"],        # tokens
         at.Bool[at.Array, "b s"],             # input_mask
         at.Bool[at.Array, " s"],              # ar_mask
-        dict[str, dict[str, np.ndarray]]      # all_attn_weights
+        # dict[str, dict[str, np.ndarray]]      # all_attn_weights
+        dict[str, dict[str, at.Float[at.Array, "b h q k"]]]
     ]:
         input_mask = []
         ar_mask = []
@@ -192,8 +193,13 @@ class Pi0(_model.BaseModel):
 
             # Access and save all attention weights for this image
             depth = self.PaliGemma.img.module.depth  # number of transformer blocks
+            # image_attn = {
+            #     f"block{l:02d}": np.array(out["encoder"][f"block{l:02d}"]["attn_weights"])
+            #     for l in range(depth)
+            # }
+
             image_attn = {
-                f"block{l:02d}": np.array(out["encoder"][f"block{l:02d}"]["attn_weights"])
+                f"block{l:02d}": out["encoder"][f"block{l:02d}"]["attn_weights"]
                 for l in range(depth)
             }
 
