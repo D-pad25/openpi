@@ -142,6 +142,7 @@ class MultiHeadDotProductAttention(Module):
         # Return output and attention weights
         return out, attn_weights
 
+'''
 class getAttentionWeights(Module):
     """Multi-head dot-product attention with optional attention weight extraction."""
     num_heads: int
@@ -228,6 +229,78 @@ class getAttentionWeights(Module):
 
         # Return output and attention weights
         return attn_weights
+'''
+
+def get_attention_weights(
+    inputs_q: jnp.ndarray,
+    inputs_kv: jnp.ndarray,
+    *,
+    num_heads: int,
+    dtype: Optional[jnp.dtype] = None,
+    param_dtype: jnp.dtype = jnp.float32,
+    qkv_features: Optional[int] = None,
+    out_features: Optional[int] = None,
+    broadcast_dropout: bool = True,
+    dropout_rate: float = 0.0,
+    deterministic: Optional[bool] = True,
+    precision: PrecisionLike = None,
+    kernel_init: Callable = lecun_normal(),
+    bias_init: Callable = zeros,
+    use_bias: bool = True,
+    dropout_rng: Optional[PRNGKey] = None,
+    mask: Optional[jnp.ndarray] = None,
+) -> jnp.ndarray:
+    """Function version of multi-head dot-product attention returning attention weights only."""
+
+    features = out_features or inputs_q.shape[-1]
+    qkv_features = qkv_features or inputs_q.shape[-1]
+    assert qkv_features % num_heads == 0, "Memory dimension must be divisible by number of heads."
+    head_dim = qkv_features // num_heads
+
+    # Dense projection layer constructor
+    dense = functools.partial(
+        DenseGeneral,
+        axis=-1,
+        dtype=dtype,
+        param_dtype=param_dtype,
+        features=(num_heads, head_dim),
+        kernel_init=kernel_init,
+        bias_init=bias_init,
+        use_bias=use_bias,
+        precision=precision
+    )
+
+    # Project inputs
+    query_proj = dense(name="query")(inputs_q)
+    key_proj = dense(name="key")(inputs_kv)
+    value_proj = dense(name="value")(inputs_kv)
+
+    # Promote dtypes
+    query_proj, key_proj, value_proj = promote_dtype(query_proj, key_proj, value_proj, dtype=dtype)
+    dtype = query_proj.dtype
+
+    # Checks
+    assert query_proj.ndim == key_proj.ndim == value_proj.ndim, "q, k, v must have same rank."
+    assert query_proj.shape[:-3] == key_proj.shape[:-3] == value_proj.shape[:-3], "q, k, v batch dims must match."
+    assert query_proj.shape[-2] == key_proj.shape[-2] == value_proj.shape[-2], "q, k, v num_heads must match."
+    assert key_proj.shape[-3] == value_proj.shape[-3], "k, v lengths must match."
+
+    # Compute attention weights
+    attn_weights = dot_product_attention_weights(
+        query_proj,
+        key_proj,
+        bias=None,
+        mask=mask,
+        broadcast_dropout=broadcast_dropout,
+        dropout_rng=dropout_rng,
+        dropout_rate=dropout_rate,
+        deterministic=deterministic,
+        dtype=dtype,
+        precision=precision
+    )
+
+    return attn_weights
+
 
 def compute_attn_weights(
     query: Array,
