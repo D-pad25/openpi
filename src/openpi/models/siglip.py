@@ -21,7 +21,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from openpi.models.attn_weights import getAttentionWeights, get_attention_weights
+from openpi.models.attn_weights import get_attention_weights
 
 import openpi.training.sharding as sharding
 
