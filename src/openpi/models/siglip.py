@@ -174,17 +174,38 @@ class Encoder1DBlock(nn.Module):
         x = sharding.activation_sharding_constraint(x)
         y = nn.LayerNorm(dtype=self.dtype_mm)(x)
 
-        attn_weights = compute_attn_weights(query=y, key=y, value=y, 
-                                            deterministic=deterministic, dtype=self.dtype_mm)
+        # attn_weights = compute_attn_weights(query=y, key=y, value=y, 
+        #                                     deterministic=deterministic, dtype=self.dtype_mm)
         
-        # attn_weights = get_attention_weights(
-        #     inputs_q=y,
-        #     inputs_kv=y,
-        #     num_heads=self.num_heads,
-        #     kernel_init=nn.initializers.xavier_uniform(),
-        #     deterministic=deterministic,
-        #     dtype=self.dtype_mm,
-        # )
+        # Dense projection layer constructor
+        qkv_features = qkv_features or y.shape[-1]
+        head_dim = qkv_features // self.num_heads
+        intermediate_dense = nn.functools.partial(
+            nn.DenseGeneral,
+            axis=-1,
+            dtype=nn.dtype,
+            param_dtype=jnp.float32,
+            features=(self.num_heads, head_dim),
+            kernel_init=nn.initializers.xavier_uniform(),
+            bias_init=nn.initializers.zeros,
+            use_bias=True,
+            precision=None
+        )
+
+        # Project inputs
+        query_proj = intermediate_dense(name="query")(y)
+        key_proj = intermediate_dense(name="key")(y)
+        value_proj = intermediate_dense(name="value")(y)
+        
+        attn_weights = get_attention_weights(
+            inputs_q=query_proj,
+            inputs_kv=key_proj,
+            inputs_v=value_proj,
+            num_heads=self.num_heads,
+            kernel_init=nn.initializers.xavier_uniform(),
+            deterministic=deterministic,
+            dtype=self.dtype_mm,
+        )
 
         out["attn_weights"] = attn_weights
         print("shape of attn_weights:", attn_weights.shape)

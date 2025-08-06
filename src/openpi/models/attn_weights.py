@@ -233,8 +233,8 @@ class getAttentionWeights(Module):
 
 def get_attention_weights(
     inputs_q: jnp.ndarray,
-    inputs_kv: jnp.ndarray,
-    *,
+    inputs_k: jnp.ndarray,
+    inputs_v: jnp.ndarray,
     num_heads: int,
     dtype: Optional[jnp.dtype] = None,
     param_dtype: jnp.dtype = jnp.float32,
@@ -257,26 +257,26 @@ def get_attention_weights(
     assert qkv_features % num_heads == 0, "Memory dimension must be divisible by number of heads."
     head_dim = qkv_features // num_heads
 
-    # Dense projection layer constructor
-    dense = functools.partial(
-        DenseGeneral,
-        axis=-1,
-        dtype=dtype,
-        param_dtype=param_dtype,
-        features=(num_heads, head_dim),
-        kernel_init=kernel_init,
-        bias_init=bias_init,
-        use_bias=use_bias,
-        precision=precision
-    )
+    # # Dense projection layer constructor
+    # dense = functools.partial(
+    #     DenseGeneral,
+    #     axis=-1,
+    #     dtype=dtype,
+    #     param_dtype=param_dtype,
+    #     features=(num_heads, head_dim),
+    #     kernel_init=kernel_init,
+    #     bias_init=bias_init,
+    #     use_bias=use_bias,
+    #     precision=precision
+    # )
 
-    # Project inputs
-    query_proj = dense(name="query")(inputs_q)
-    key_proj = dense(name="key")(inputs_kv)
-    value_proj = dense(name="value")(inputs_kv)
+    # # Project inputs
+    # query_proj = dense(name="query")(inputs_q)
+    # key_proj = dense(name="key")(inputs_kv)
+    # value_proj = dense(name="value")(inputs_kv)
 
     # Promote dtypes
-    query_proj, key_proj, value_proj = promote_dtype(query_proj, key_proj, value_proj, dtype=dtype)
+    query_proj, key_proj, value_proj = promote_dtype(inputs_q, inputs_k, inputs_v, dtype=dtype)
     dtype = query_proj.dtype
 
     # Checks
