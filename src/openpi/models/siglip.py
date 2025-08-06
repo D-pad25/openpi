@@ -21,7 +21,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from openpi.models.attn_weights import get_attention_weights
+from openpi.models.attn_weights import get_attention_weights, compute_attn_weights
 
 import openpi.training.sharding as sharding
 
@@ -174,17 +174,17 @@ class Encoder1DBlock(nn.Module):
         x = sharding.activation_sharding_constraint(x)
         y = nn.LayerNorm(dtype=self.dtype_mm)(x)
 
-        # attn_weights = compute_attn_weights(query=y, key=y, value=y, 
-        #                                     deterministic=deterministic, dtype=self.dtype_mm)
+        attn_weights = compute_attn_weights(query=y, key=y, value=y, 
+                                            deterministic=deterministic, dtype=self.dtype_mm)
         
-        attn_weights = get_attention_weights(
-            inputs_q=y,
-            inputs_kv=y,
-            num_heads=self.num_heads,
-            kernel_init=nn.initializers.xavier_uniform(),
-            deterministic=deterministic,
-            dtype=self.dtype_mm,
-        )
+        # attn_weights = get_attention_weights(
+        #     inputs_q=y,
+        #     inputs_kv=y,
+        #     num_heads=self.num_heads,
+        #     kernel_init=nn.initializers.xavier_uniform(),
+        #     deterministic=deterministic,
+        #     dtype=self.dtype_mm,
+        # )
 
         out["attn_weights"] = attn_weights
         print("shape of attn_weights:", attn_weights.shape)
