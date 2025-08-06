@@ -142,6 +142,93 @@ class MultiHeadDotProductAttention(Module):
         # Return output and attention weights
         return out, attn_weights
 
+class MultiHeadDotProductAttention(Module):
+    """Multi-head dot-product attention with optional attention weight extraction."""
+    num_heads: int
+    dtype: Optional[Dtype] = None
+    param_dtype: Dtype = jnp.float32
+    qkv_features: Optional[int] = None
+    out_features: Optional[int] = None
+    broadcast_dropout: bool = True
+    dropout_rate: float = 0.
+    deterministic: Optional[bool] = None
+    precision: PrecisionLike = None
+    kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
+    bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+    use_bias: bool = True
+    decode: bool = False
+
+    @compact
+    def __call__(self,
+                 inputs_q: Array,
+                 inputs_kv: Array,
+                 mask: Optional[Array] = None,
+                 deterministic: Optional[bool] = None) -> Tuple[Array, Array]:
+        features = self.out_features or inputs_q.shape[-1]
+        qkv_features = self.qkv_features or inputs_q.shape[-1]
+        assert qkv_features % self.num_heads == 0, (
+            'Memory dimension must be divisible by number of heads.')
+        head_dim = qkv_features // self.num_heads
+
+        dense = functools.partial(DenseGeneral,
+                                  axis=-1,
+                                  dtype=self.dtype,
+                                  param_dtype=self.param_dtype,
+                                  features=(self.num_heads, head_dim),
+                                  kernel_init=self.kernel_init,
+                                  bias_init=self.bias_init,
+                                  use_bias=self.use_bias,
+                                  precision=self.precision)
+
+        # Project inputs
+        query = dense(name='query')(inputs_q)
+        key = dense(name='key')(inputs_kv)
+        value = dense(name='value')(inputs_kv)
+
+        dropout_rng = None
+        if self.dropout_rate > 0.:
+            m_deterministic = deterministic if deterministic is not None else self.deterministic
+            if not m_deterministic:
+                dropout_rng = self.make_rng('dropout')
+        else:
+            m_deterministic = True
+
+        # Ensure all Q, K, V tensors have the same dtype (e.g., float32, bfloat16, etc.)
+        query, key, value = promote_dtype(query, key, value, dtype=self.dtype)
+        dtype = query.dtype
+
+        # === Shape and consistency checks ===
+
+        # All tensors should have the same rank (e.g., 4D: [batch, seq_len, num_heads, head_dim])
+        assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
+        
+        # Ensure batch dimensions match (e.g., batch size, optional spatial dims)
+        assert query.shape[:-3] == key.shape[:-3] == value.shape[:-3], (
+            'q, k, v batch dims must match.')
+        
+        # All should have the same number of heads (used for slicing and attention heads)
+        assert query.shape[-2] == key.shape[-2] == value.shape[-2], (
+            'q, k, v num_heads must match.')
+        
+        # Key and value sequences must match in length (used during weighted sum)
+        assert key.shape[-3] == value.shape[-3], 'k, v lengths must match.'
+        # Get attention weights
+        attn_weights = dot_product_attention_weights(
+            query,
+            key,
+            bias=None,
+            mask=mask,
+            broadcast_dropout=self.broadcast_dropout,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.dropout_rate,
+            deterministic=m_deterministic,
+            dtype=dtype,
+            precision=self.precision
+        )  # shape: [batch..., num_heads, query_len, key_len]
+
+        # Return output and attention weights
+        return attn_weights
+
 def compute_attn_weights(
     query: Array,
     key: Array,
