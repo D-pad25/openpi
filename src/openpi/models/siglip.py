@@ -174,8 +174,8 @@ class Encoder1DBlock(nn.Module):
         x = sharding.activation_sharding_constraint(x)
         y = nn.LayerNorm(dtype=self.dtype_mm)(x)
 
-        attn_weights = compute_attn_weights(query=y, key=y, value=y, 
-                                            deterministic=deterministic, dtype=self.dtype_mm)
+        # attn_weights = compute_attn_weights(query=y, key=y, value=y, 
+        #                                     deterministic=deterministic, dtype=self.dtype_mm)
         
         attn_weights = getAttentionWeights(
             num_heads=self.num_heads,

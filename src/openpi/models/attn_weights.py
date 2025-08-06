@@ -142,7 +142,7 @@ class MultiHeadDotProductAttention(Module):
         # Return output and attention weights
         return out, attn_weights
 
-class MultiHeadDotProductAttention(Module):
+class getAttentionWeights(Module):
     """Multi-head dot-product attention with optional attention weight extraction."""
     num_heads: int
     dtype: Optional[Dtype] = None
