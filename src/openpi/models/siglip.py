@@ -20,6 +20,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
+import functools
 
 from openpi.models.attn_weights import get_attention_weights, compute_attn_weights
 
@@ -185,7 +186,7 @@ class Encoder1DBlock(nn.Module):
             f'Memory dimension ({qkv_features}) must be divisible by number of'
             f' heads ({self.num_heads}).'
             )
-        intermediate_dense = nn.functools.partial(
+        intermediate_dense = functools.partial(
             nn.DenseGeneral,
             axis=-1,
             dtype=nn.dtype,
