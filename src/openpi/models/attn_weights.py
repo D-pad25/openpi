@@ -252,10 +252,10 @@ def get_attention_weights(
 ) -> jnp.ndarray:
     """Function version of multi-head dot-product attention returning attention weights only."""
 
-    features = out_features or inputs_q.shape[-1]
-    qkv_features = qkv_features or inputs_q.shape[-1]
-    assert qkv_features % num_heads == 0, "Memory dimension must be divisible by number of heads."
-    head_dim = qkv_features // num_heads
+    # features = out_features or inputs_q.shape[-1]
+    # qkv_features = qkv_features or inputs_q.shape[-1]
+    # assert qkv_features % num_heads == 0, "Memory dimension must be divisible by number of heads."
+    # head_dim = qkv_features // num_heads
 
     # # Dense projection layer constructor
     # dense = functools.partial(
