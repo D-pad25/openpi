@@ -22,6 +22,8 @@ import jax.numpy as jnp
 import numpy as np
 import functools
 
+from flax.linen.dtypes import Dtype
+
 from openpi.models.attn_weights import get_attention_weights, compute_attn_weights
 
 import openpi.training.sharding as sharding
@@ -169,6 +171,7 @@ class Encoder1DBlock(nn.Module):
     num_heads: int = 12
     dropout: float = 0.0
     dtype_mm: str = "float32"
+    dtype: Dtype | None = None
 
     @nn.compact
     def __call__(self, x, deterministic=True):  # noqa: FBT002
@@ -189,7 +192,7 @@ class Encoder1DBlock(nn.Module):
         intermediate_dense = functools.partial(
             nn.DenseGeneral,
             axis=-1,
-            dtype=nn.dtype,
+            dtype=self.dtype,
             param_dtype=jnp.float32,
             features=(self.num_heads, head_dim),
             kernel_init=nn.initializers.xavier_uniform(),
