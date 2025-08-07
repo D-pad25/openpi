@@ -85,7 +85,16 @@ def main(
                 "prompt": prompt,
             }
             # Request new action chunk from policy
-            action_chunk = policy_client.infer(observation)["actions"]
+            result = policy_client.infer(observation)
+
+            actions = result["actions"]
+            attn_weights = result["attn_weights"]
+
+            print("Actions shape:", actions.shape)
+            print("Attention weights shape:", attn_weights.shape)
+
+            # action_chunk = policy_client.infer(observation)["actions"]
+            action_chunk = actions
             actions_from_chunk_completed = 0
 
         action = action_chunk[actions_from_chunk_completed]
