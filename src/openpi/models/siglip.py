@@ -208,7 +208,7 @@ class Encoder1DBlock(nn.Module):
         
         attn_weights = get_attention_weights(
             inputs_q=query_proj,
-            inputs_kv=key_proj,
+            inputs_k=key_proj,
             inputs_v=value_proj,
             num_heads=self.num_heads,
             kernel_init=nn.initializers.xavier_uniform(),
