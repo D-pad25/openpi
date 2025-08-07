@@ -163,7 +163,8 @@ class Encoder1DBlock(nn.Module):
 class Encoder1DBlock(nn.Module):
     """Single transformer encoder block (MHSA + MLP)."""
 
-    mlp_dim: int | None = None  # Defaults to 4x input dim
+    mlp_dim: int | None = None  # Defaults to 4x input 
+    qkv_features: int | None = None
     num_heads: int = 12
     dropout: float = 0.0
     dtype_mm: str = "float32"
@@ -178,8 +179,12 @@ class Encoder1DBlock(nn.Module):
         #                                     deterministic=deterministic, dtype=self.dtype_mm)
         
         # Dense projection layer constructor
-        qkv_features = qkv_features or y.shape[-1]
+        qkv_features = self.qkv_features or y.shape[-1]
         head_dim = qkv_features // self.num_heads
+        assert qkv_features % self.num_heads == 0, (
+            f'Memory dimension ({qkv_features}) must be divisible by number of'
+            f' heads ({self.num_heads}).'
+            )
         intermediate_dense = nn.functools.partial(
             nn.DenseGeneral,
             axis=-1,
