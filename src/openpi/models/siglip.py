@@ -24,7 +24,7 @@ import functools
 
 from flax.linen.dtypes import Dtype
 
-from openpi.models.attn_weights import get_attention_weights, compute_attn_weights
+from openpi.models.attn_weights import get_attention_weights, compute_attn_weights, MultiHeadDotProductAttention
 
 import openpi.training.sharding as sharding
 
@@ -183,6 +183,8 @@ class Encoder1DBlock(nn.Module):
         #                                     deterministic=deterministic, dtype=self.dtype_mm)
         
         # Dense projection layer constructor
+
+        '''
         qkv_features = self.qkv_features or y.shape[-1]
         head_dim = qkv_features // self.num_heads
         assert qkv_features % self.num_heads == 0, (
@@ -219,12 +221,24 @@ class Encoder1DBlock(nn.Module):
         out["attn_weights"] = attn_weights
         print("shape of attn_weights:", attn_weights.shape)
         
+        
         y = out["sa"] = nn.MultiHeadDotProductAttention(
             num_heads=self.num_heads,
             kernel_init=nn.initializers.xavier_uniform(),
             deterministic=deterministic,
             dtype=self.dtype_mm,
         )(y, y)
+        '''
+        y, attn_weights = MultiHeadDotProductAttention(
+            num_heads=self.num_heads,
+            kernel_init=nn.initializers.xavier_uniform(),
+            deterministic=deterministic,
+            dtype=self.dtype_mm,
+        )(y, y)
+        
+        out["sa"] = y
+        out["attn_weights"] = attn_weights
+        print("shape of attn_weights:", attn_weights.shape)
 
         y = sharding.activation_sharding_constraint(y)
         y = nn.Dropout(rate=self.dropout)(y, deterministic)

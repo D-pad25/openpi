@@ -5,6 +5,7 @@ from flax.linen.linear import PrecisionLike
 from flax.linen.initializers import zeros, lecun_normal
 from flax.core.frozen_dict import FrozenDict
 from jax import lax
+import jax
 import jax.numpy as jnp
 import functools
 from typing import Optional, Callable, Tuple, Union, Any
@@ -29,6 +30,9 @@ class MultiHeadDotProductAttention(Module):
     bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
     use_bias: bool = True
     decode: bool = False
+    einsum_dot_general: Callable[..., Array] | None = None
+    qk_attn_weights_einsum: Callable[..., Array] | None = None
+    attn_weights_value_einsum: Callable[..., Array] | None = None
 
     @compact
     def __call__(self,
@@ -36,6 +40,7 @@ class MultiHeadDotProductAttention(Module):
                  inputs_kv: Array,
                  mask: Optional[Array] = None,
                  deterministic: Optional[bool] = None) -> Tuple[Array, Array]:
+        
         features = self.out_features or inputs_q.shape[-1]
         qkv_features = self.qkv_features or inputs_q.shape[-1]
         assert qkv_features % self.num_heads == 0, (
@@ -123,14 +128,27 @@ class MultiHeadDotProductAttention(Module):
         )  # shape: [batch..., num_heads, query_len, key_len]
 
         # Multiply weights by value
-        x = jnp.einsum('...hqk,...khd->...qhd', attn_weights, value, precision=self.precision)
+        attn_weights_value_einsum = functools.partial(
+            jnp.einsum,
+            precision=self.precision,
+            _dot_general=self.einsum_dot_general
+            if self.einsum_dot_general
+            else jax.lax.dot_general,
+        )
+        # x = jnp.einsum('...hqk,...khd->...qhd', attn_weights, value, precision=self.precision)
 
+        x = attn_weights_value_einsum(
+            '...hqk,...khd->...qhd',
+            attn_weights,
+            value,
+        )
+        
         # Combine heads
         # x = x.reshape(*x.shape[:-2], -1)
 
         # Final output projection
         out = DenseGeneral(features=features,
-                           axis=-1,
+                           axis=[-2, -1],
                            kernel_init=self.kernel_init,
                            bias_init=self.bias_init,
                            use_bias=self.use_bias,
