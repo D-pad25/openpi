@@ -125,43 +125,64 @@ def plot_attention_map_all_blocks(image: np.ndarray,
         print(f"✅ Saved: {save_path}")
         plt.close()
 
-def plot_combined_attention(image: np.ndarray,
-                            attn_weights: dict[str, dict[str, np.ndarray]],
-                            source_name: str = "right_wrist_0_rgb",
-                            token_idx: int = 0,
-                            log_dir: str = "."):
+def plot_combined_attention_map(image: np.ndarray,
+                                attn_weights: dict[str, dict[str, np.ndarray]],
+                                source_name: str = "right_wrist_0_rgb",
+                                log_dir: str = "."):
     """
-    Combines all blocks and heads to visualize global attention importance.
+    Combines attention across all blocks, heads, and token indices into a single attention map,
+    resizes it to the input image, and overlays the result.
     """
-    os.makedirs(log_dir, exist_ok=True)
-    blocks = attn_weights[source_name]
-
     combined_attn = None
-    for block_name, attn in blocks.items():
-        if attn.ndim != 3:
+    num_blocks = 0
+
+    try:
+        blocks = attn_weights[source_name]
+    except KeyError as e:
+        print(f"Missing source name: {e}")
+        return
+
+    for block_name, block_attn in blocks.items():
+        # Shape: (num_heads, num_tokens, num_tokens)
+        num_heads, num_tokens_q, num_tokens_k = block_attn.shape
+        if num_tokens_q != num_tokens_k:
+            print(f"Skipping block {block_name} due to asymmetric token shapes")
             continue
-        attn_avg = attn.mean(axis=0)  # (256, 256)
+
+        # Combine over all heads and query tokens
+        avg_attn = block_attn.mean(axis=0).mean(axis=0)  # shape: (num_tokens,)
+        
+        grid_size = int(np.sqrt(avg_attn.shape[0]))
+        if grid_size * grid_size != avg_attn.shape[0]:
+            print(f"Skipping block {block_name}: token count {avg_attn.shape[0]} is not a perfect square")
+            continue
+
+        attn_2d = avg_attn.reshape(grid_size, grid_size).copy()
+        attn_2d /= attn_2d.max() + 1e-8  # Normalize
         if combined_attn is None:
-            combined_attn = attn_avg
+            combined_attn = attn_2d
         else:
-            combined_attn += attn_avg
+            combined_attn += attn_2d
+        num_blocks += 1
 
-    combined_attn /= len(blocks)
+    if combined_attn is None or num_blocks == 0:
+        print("No valid attention maps found.")
+        return
 
-    importance = combined_attn.sum(axis=0)  # attention received by each token
-    importance /= importance.max() + 1e-8
-    importance_2d = importance.reshape(16, 16)
-    importance_up = cv2.resize(importance_2d, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_LINEAR)
+    # Normalize combined attention map
+    combined_attn /= num_blocks
+    attn_up = cv2.resize(combined_attn, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_LINEAR)
 
     # Plot
     plt.figure(figsize=(6, 6))
-    plt.imshow(image / 255.0)
-    plt.imshow(importance_up, cmap="hot", alpha=0.5)
-    plt.title("Combined Attention Across All Blocks")
+    plt.imshow(image / 255.0 if image.dtype == np.uint8 else image)
+    plt.imshow(attn_up, cmap="jet", alpha=0.5)
+    plt.title(f"Combined Attention Map\n{source_name} (All Blocks & Tokens)")
     plt.axis("off")
     plt.tight_layout()
 
-    save_path = os.path.join(log_dir, f"combined_attention_{source_name}.png")
+    filename = f"combined_attnmap_{source_name}.png"
+    save_path = os.path.join(log_dir, filename)
     plt.savefig(save_path)
-    print(f"✅ Saved combined attention map: {save_path}")
+    print(f"✅ Combined attention map saved to: {save_path}")
     plt.close()
