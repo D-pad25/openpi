@@ -125,7 +125,7 @@ def main(
                     image=obs["base_rgb"],      # Input image
                     attn_weights=result["attn_weights"], # From your client
                     source_name="base_0_rgb",
-                    block="block12",
+                    block="block00",
                     head=0,
                     token_idx=0,  # usually the [CLS] token
                     log_dir=log_dir
