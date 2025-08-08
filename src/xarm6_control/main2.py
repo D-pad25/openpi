@@ -135,11 +135,11 @@ def main(
                 plot_attention_map_all_blocks(
                     image=obs["base_rgb"],
                     attn_weights=result["attn_weights"],
-                    source_name="right_wrist_0_rgb",
+                    source_name="base_0_rgb",
                     token_idx=100,
                     log_dir=log_dir
                 )
-                
+
                         
             # action_chunk = policy_client.infer(observation)["actions"]
             action_chunk = actions
