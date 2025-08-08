@@ -70,6 +70,13 @@ class Policy(BasePolicy):
         #     k: {kk: np.asarray(vv) for kk, vv in vv_dict.items()}
         #     for k, vv_dict in attn_weights.items()
         # }
+        attn_weights = {
+            source: {
+                block: np.asarray(weight[0])  # convert from JAX and remove batch dim
+                for block, weight in block_dict.items()
+            }
+            for source, block_dict in attn_weights.items()
+        }
         output_after_transform = self._output_transform(outputs)
         output_after_transform["attn_weights"] = attn_weights
         return output_after_transform
