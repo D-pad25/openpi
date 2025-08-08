@@ -9,6 +9,8 @@ from xarm_env import XArmRealEnv, MockXArmEnv
 from zmq_core.camera_node import ZMQClientCamera
 import datetime
 import os
+from plot_attention import plot_attention_map
+
 class MockCamera:
     def read(self, img_size=None):
         # Return fake RGB and depth images
@@ -30,6 +32,7 @@ def main(
     log_dir: str = "/media/acrv/DanielsSSD/VLA_data",
     # log_dir: str = os.path.expanduser("~/test_logs"),
     save: bool = False,  # New argument to control saving behavior
+    plot_attention_map: bool = False,  # New argument to control attention map plotting
 ):
     # Create a log directory if it doesn't exist
     if save:
@@ -103,6 +106,16 @@ def main(
             else:
                 print("No attention weights returned.")
 
+            if plot_attention_map:
+                plot_attention_map(
+                    image=obs["right_wrist_0_rgb"],      # Input image
+                    attn_weights=result["attn_weights"], # From your client
+                    source_name="right_wrist_0_rgb",
+                    block="block12",
+                    head=0,
+                    token_idx=0  # usually the [CLS] token
+                )
+                        
             # action_chunk = policy_client.infer(observation)["actions"]
             action_chunk = actions
             actions_from_chunk_completed = 0
