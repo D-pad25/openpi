@@ -1,3 +1,4 @@
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 import einops
@@ -9,7 +10,8 @@ def plot_attention_map(image: np.ndarray,
                        block: str = "block12",
                        head: int = 0,
                        token_idx: int = 0,
-                       upscale: int = 14):
+                       upscale: int = 14,
+                       log_dir: str = "."):
     """
     Plots an attention map overlayed on the input image.
 
@@ -59,4 +61,12 @@ def plot_attention_map(image: np.ndarray,
     plt.title(f"Attention Map\n{source_name}, {block}, head={head}, token={token_idx}")
     plt.axis("off")
     plt.tight_layout()
-    plt.show()
+
+    # Save to log_dir
+    filename = f"attnmap_{source_name}_{block}_head{head}_token{token_idx}.png"
+    save_path = os.path.join(log_dir, filename)
+    plt.savefig(save_path)
+    print(f"✅ Attention map saved to: {save_path}")
+    plt.close()
+
+    # plt.show()
