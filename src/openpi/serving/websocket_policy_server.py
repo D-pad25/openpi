@@ -7,6 +7,17 @@ from openpi_client import msgpack_numpy
 import websockets.asyncio.server
 import websockets.frames
 
+import numpy as np
+
+def convert_bfloat16_to_float32(tree):
+        """Recursively converts all bfloat16 arrays to float32 in a nested structure."""
+        if isinstance(tree, dict):
+            return {k: convert_bfloat16_to_float32(v) for k, v in tree.items()}
+        elif isinstance(tree, (list, tuple)):
+            return type(tree)(convert_bfloat16_to_float32(v) for v in tree)
+        elif isinstance(tree, np.ndarray) and tree.dtype == np.bfloat16:
+            return tree.astype(np.float32)
+        return tree
 
 class WebsocketPolicyServer:
     """Serves a policy using the websocket protocol. See websocket_client_policy.py for a client implementation.
@@ -50,6 +61,7 @@ class WebsocketPolicyServer:
             try:
                 obs = msgpack_numpy.unpackb(await websocket.recv())
                 action = self._policy.infer(obs)
+                action = convert_bfloat16_to_float32(action)
                 await websocket.send(packer.pack(action))
             except websockets.ConnectionClosed:
                 logging.info(f"Connection from {websocket.remote_address} closed")
