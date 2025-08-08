@@ -72,7 +72,7 @@ class Policy(BasePolicy):
         # }
         attn_weights = {
             source: {
-                block: np.asarray(weight[0])  # convert from JAX and remove batch dim
+                block: np.asarray(weight[0]).astype(np.float32)  # remove batch dim and convert dtype
                 for block, weight in block_dict.items()
             }
             for source, block_dict in attn_weights.items()
