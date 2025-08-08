@@ -33,7 +33,7 @@ def main(
     step_through_instructions: bool = False,  # New argument
     delta_threshold: float = 0.25,  # New argument for delta threshold
     # log_dir: str = "/media/acrv/DanielsSSD/VLA_data",
-    log_dir: str = os.path.expanduser("~/Thesis/attention_maps/v6"),
+    log_dir: str = os.path.expanduser("~/Thesis/attention_maps/v5"),
     # log_dir: str = os.path.expanduser("~/test_logs"),
     save: bool = False,  # New argument to control saving behavior
     plot_attention: bool = False,  # New argument to control attention map plotting
@@ -122,7 +122,7 @@ def main(
                 print("No attention weights returned.")
 
             if plot_attention:
-                plot_attention_map_all_blocksv2(
+                plot_attention_map_all_blocks(
                     image=obs["wrist_rgb"],
                     attn_weights=result["attn_weights"],
                     source_name="left_wrist_0_rgb",
@@ -135,7 +135,7 @@ def main(
                     source_name="left_wrist_0_rgb",
                     log_dir=log_dir
                 )
-                plot_attention_map_all_blocksv2(
+                plot_attention_map_all_blocks(
                     image=obs["base_rgb"],
                     attn_weights=result["attn_weights"],
                     source_name="base_0_rgb",

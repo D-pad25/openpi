@@ -96,6 +96,15 @@ def plot_attention_map_all_blocks(image: np.ndarray,
             continue
 
         attn_map = attn_avg[token_idx]  # shape: (num_tokens,)
+        # 🔍 Debug: Identify top attention tokens
+        sorted_indices = np.argsort(attn_map)[::-1]
+        top_tokens = sorted_indices[:5]
+        top_values = attn_map[top_tokens]
+
+        print(f"🔍 Top attention contributors for {block}, token={token_idx}")
+        for i, (idx, val) in enumerate(zip(top_tokens, top_values)):
+            row, col = divmod(idx, int(np.sqrt(len(attn_map))))
+            print(f"  #{i+1}: Token {idx} (row={row}, col={col}) - value={val:.4f}")
         num_tokens = attn_map.shape[0]
         grid_size = int(np.sqrt(num_tokens))
 
