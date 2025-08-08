@@ -44,6 +44,7 @@ def plot_attention_map(image: np.ndarray,
 
     # Reshape and upscale
     attn_2d = attn_map.reshape(grid_size, grid_size)
+    attn_2d = attn_2d.copy()  # Make the array writeable
     attn_2d /= attn_2d.max()
 
     attn_up = einops.repeat(attn_2d, 'h w -> (h ph) (w pw)', ph=upscale, pw=upscale)
