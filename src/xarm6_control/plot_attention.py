@@ -32,7 +32,8 @@ def plot_attention_map(image: np.ndarray,
         return
 
     # Reshape to 2D
-    attn_2d = attn_map.reshape(grid_size, grid_size)
+    # attn_2d = attn_map.reshape(grid_size, grid_size)
+    attn_2d = attn_map.reshape(grid_size, grid_size).copy()
     attn_2d /= attn_2d.max() + 1e-8  # Normalize
 
     # Resize to image resolution
