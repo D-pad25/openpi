@@ -126,7 +126,7 @@ def main(
                     image=obs["wrist_rgb"],
                     attn_weights=result["attn_weights"],
                     source_name="left_wrist_0_rgb",
-                    token_idx=100,
+                    token_idx=200,
                     log_dir=log_dir
                 )
                 plot_combined_attention_map(
@@ -139,7 +139,7 @@ def main(
                     image=obs["base_rgb"],
                     attn_weights=result["attn_weights"],
                     source_name="base_0_rgb",
-                    token_idx=100,
+                    token_idx=200,
                     log_dir=log_dir
                 )
                 plot_combined_attention_map(
