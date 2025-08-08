@@ -186,3 +186,53 @@ def plot_combined_attention_map(image: np.ndarray,
     plt.savefig(save_path)
     print(f"✅ Combined attention map saved to: {save_path}")
     plt.close()
+
+
+def plot_attention_map_all_blocksv2(image: np.ndarray,
+                                attn_weights: dict[str, dict[str, np.ndarray]],
+                                source_name: str = "right_wrist_0_rgb",
+                                token_idx: int = 0,
+                                log_dir: str = "."):
+    os.makedirs(log_dir, exist_ok=True)
+
+    if source_name not in attn_weights:
+        print(f"❌ Source '{source_name}' not found.")
+        return
+
+    for block, attn in attn_weights[source_name].items():
+        if attn.ndim != 3:
+            print(f"Skipping {block} due to unexpected shape {attn.shape}")
+            continue
+
+        attn_avg = attn.mean(axis=0)  # (tokens, tokens)
+
+        if token_idx >= attn_avg.shape[0]:
+            print(f"❌ Invalid token index {token_idx} for block {block}")
+            continue
+
+        attn_map = attn_avg[token_idx]
+        num_tokens = attn_map.shape[0]
+        grid_size = int(np.sqrt(num_tokens))
+
+        if grid_size * grid_size != num_tokens:
+            print(f"❌ Token count {num_tokens} is not a perfect square in {block}")
+            continue
+
+        attn_2d = attn_map.reshape(grid_size, grid_size).copy()
+        attn_2d[0, 0] = 0  # Mask token 0 hotspot
+        attn_2d /= attn_2d.max() + 1e-8
+
+        attn_up = cv2.resize(attn_2d, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+        plt.figure(figsize=(6, 6))
+        plt.imshow(image / 255.0)
+        plt.imshow(attn_up, cmap="jet", alpha=0.5)
+        plt.title(f"Averaged Attention\n{source_name}, {block}, token={token_idx}")
+        plt.axis("off")
+        plt.tight_layout()
+
+        filename = f"attnmap_{source_name}_{block}_avg_token{token_idx}.png"
+        save_path = os.path.join(log_dir, filename)
+        plt.savefig(save_path)
+        print(f"✅ Saved: {save_path}")
+        plt.close()
