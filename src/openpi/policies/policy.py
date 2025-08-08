@@ -66,14 +66,14 @@ class Policy(BasePolicy):
 
         # Unbatch and convert to np.ndarray.
         outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
-        outputs["attn_weights"] = {
-            k: {kk: np.asarray(vv) for kk, vv in vv_dict.items()}
-            for k, vv_dict in attn_weights.items()
-        }
-        print("Actual Actions Shape before transformation:", outputs["actions"])
+        # outputs["attn_weights"] = {
+        #     k: {kk: np.asarray(vv) for kk, vv in vv_dict.items()}
+        #     for k, vv_dict in attn_weights.items()
+        # }
         output_after_transform = self._output_transform(outputs)
-        print("Actual Actions Shape after transformation:", output_after_transform["actions"])
-        return self._output_transform(outputs)
+        output_after_transform["attn_weights"] = attn_weights
+        return output_after_transform
+        # return self._output_transform(outputs)
         
 
     @property
