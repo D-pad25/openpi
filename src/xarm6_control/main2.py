@@ -86,11 +86,11 @@ def main(
                 base_img_path = os.path.expanduser("~/Thesis/Data/base_rgb.png")
                 wrist_img_path = os.path.expanduser("~/Thesis/Data/wrist_rgb.png")
                 # Open and convert to numpy arrays
-                base_rgb = np.array(Image.open(base_img_path).convert("RGB"))
-                wrist_rgb = np.array(Image.open(wrist_img_path).convert("RGB"))
+                obs["base_rgb"] = np.array(Image.open(base_img_path).convert("RGB"))
+                obs["wrist_rgb"] = np.array(Image.open(wrist_img_path).convert("RGB"))
                 # Resize with pad to match policy input size
-                base_rgb = image_tools.resize_with_pad(base_rgb, 224, 224)
-                wrist_rgb = image_tools.resize_with_pad(wrist_rgb, 224, 224)
+                base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
+                wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
             else:
                 base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
                 wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
