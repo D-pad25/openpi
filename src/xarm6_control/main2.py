@@ -92,7 +92,16 @@ def main(
             attn_weights = result["attn_weights"]
 
             print("Actions shape:", actions.shape)
-            print("Attention weights shape:", attn_weights.shape)
+            # Access and print attention weights
+            if "attn_weights" in result:
+                attn_weights = result["attn_weights"]
+                print("Client-side Attention Weights Shapes:")
+                for source_name, blocks in attn_weights.items():
+                    print(f"  Source: {source_name}")
+                    for block_name, array in blocks.items():
+                        print(f"    {block_name}: shape = {np.asarray(array).shape}")
+            else:
+                print("No attention weights returned.")
 
             # action_chunk = policy_client.infer(observation)["actions"]
             action_chunk = actions
