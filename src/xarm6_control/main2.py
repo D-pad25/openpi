@@ -88,7 +88,8 @@ def main(
             result = policy_client.infer(observation)
 
             actions = result["actions"]
-            attn_weights = result["attn_weights"]
+            print("Returning keys from infer:", result.keys())
+            # attn_weights = result["attn_weights"]
 
             # print("Actions shape:", actions.shape)
             # print("Attention weights shape:", attn_weights.shape)
