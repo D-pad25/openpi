@@ -33,7 +33,7 @@ def main(
     step_through_instructions: bool = False,  # New argument
     delta_threshold: float = 0.25,  # New argument for delta threshold
     # log_dir: str = "/media/acrv/DanielsSSD/VLA_data",
-    log_dir: str = os.path.expanduser("~/Thesis/attention_maps/v2"),
+    log_dir: str = os.path.expanduser("~/Thesis/attention_maps/v3"),
     # log_dir: str = os.path.expanduser("~/test_logs"),
     save: bool = False,  # New argument to control saving behavior
     plot_attention: bool = False,  # New argument to control attention map plotting
@@ -84,8 +84,8 @@ def main(
             # pad images as per policy requirements
             if mock:
                 # Load saved images
-                base_img_path = os.path.expanduser("~/Thesis/Data/base_rgb_2.png")
-                wrist_img_path = os.path.expanduser("~/Thesis/Data/wrist_rgb_2.png")
+                base_img_path = os.path.expanduser("~/Thesis/Data/base_rgb_3.png")
+                wrist_img_path = os.path.expanduser("~/Thesis/Data/wrist_rgb_3.png")
                 # Open and convert to numpy arrays
                 obs["base_rgb"] = np.array(Image.open(base_img_path).convert("RGB"))
                 obs["wrist_rgb"] = np.array(Image.open(wrist_img_path).convert("RGB"))
