@@ -11,6 +11,8 @@ import datetime
 import os
 from plot_attention import plot_attention_map
 
+from PIL import Image
+
 class MockCamera:
     def read(self, img_size=None):
         # Return fake RGB and depth images
@@ -79,8 +81,19 @@ def main(
         # Get new action_chunk if empty or 25 steps have passed
         if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= 25:
             # pad images as per policy requirements
-            base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
-            wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
+            if mock:
+                # Load saved images
+                base_img_path = os.path.expanduser("~/Thesis/Data/base_rgb.png")
+                wrist_img_path = os.path.expanduser("~/Thesis/Data/wrist_rgb.png")
+                # Open and convert to numpy arrays
+                base_rgb = np.array(Image.open(base_img_path).convert("RGB"))
+                wrist_rgb = np.array(Image.open(wrist_img_path).convert("RGB"))
+                # Resize with pad to match policy input size
+                base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
+                wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
+            else:
+                base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
+                wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
 
             observation = {
                 "state": np.concatenate([obs["joint_position"], obs["gripper_position"]]),
