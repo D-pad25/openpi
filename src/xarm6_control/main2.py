@@ -123,13 +123,11 @@ def main(
                 print("No attention weights returned.")
 
             if plot_attention:
-                plot_attention_map(
-                    image=obs["base_rgb"],      # Input image
-                    attn_weights=result["attn_weights"], # From your client
-                    source_name="base_0_rgb",
-                    block="block26",
-                    head=0,
-                    token_idx=0,  # usually the [CLS] token
+                plot_attention_map_all_blocks(
+                    image=obs["wrist_rgb"],
+                    attn_weights=result["attn_weights"],
+                    source_name="left_wrist_0_rgb",
+                    token_idx=100,
                     log_dir=log_dir
                 )
                 plot_attention_map_all_blocks(

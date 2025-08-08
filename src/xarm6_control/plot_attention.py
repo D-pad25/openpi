@@ -3,6 +3,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 
+'''
+Example Function Call:
+plot_attention_map(
+    image=obs["base_rgb"],      # Input image
+    attn_weights=result["attn_weights"], # From your client
+    source_name="base_0_rgb",
+    block="block26",
+    head=0,
+    token_idx=0,  # usually the [CLS] token
+    log_dir=log_dir
+)
+'''
 def plot_attention_map(image: np.ndarray,
                        attn_weights: dict[str, dict[str, np.ndarray]],
                        source_name: str = "right_wrist_0_rgb",
