@@ -51,8 +51,11 @@ class Policy(BasePolicy):
             _model.Observation.from_dict(inputs),
             **self._sample_kwargs,
         )
-        print("Actions shape:", actions.shape)
-        print("Attention weights shape:", attn_weights.shape)
+        print("Attention Weights Shapes:")
+        for source_name, blocks in attn_weights.items():
+            print(f"  Source: {source_name}")
+            for block_name, array in blocks.items():
+                print(f"    {block_name}: shape = {array.shape}")
         outputs = {
             "state": inputs["state"],
             # Removed this line since it is not needed in the new policy.

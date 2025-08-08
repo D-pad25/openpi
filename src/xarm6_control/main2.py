@@ -90,8 +90,8 @@ def main(
             actions = result["actions"]
             attn_weights = result["attn_weights"]
 
-            print("Actions shape:", actions.shape)
-            print("Attention weights shape:", attn_weights.shape)
+            # print("Actions shape:", actions.shape)
+            # print("Attention weights shape:", attn_weights.shape)
 
             # action_chunk = policy_client.infer(observation)["actions"]
             action_chunk = actions
