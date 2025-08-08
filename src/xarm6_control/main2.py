@@ -114,7 +114,8 @@ def main(
                     source_name="right_wrist_0_rgb",
                     block="block12",
                     head=0,
-                    token_idx=0  # usually the [CLS] token
+                    token_idx=0,  # usually the [CLS] token
+                    log_dir=log_dir
                 )
                         
             # action_chunk = policy_client.infer(observation)["actions"]
