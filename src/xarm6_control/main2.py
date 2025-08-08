@@ -9,7 +9,7 @@ from xarm_env import XArmRealEnv, MockXArmEnv
 from zmq_core.camera_node import ZMQClientCamera
 import datetime
 import os
-from plot_attention import plot_attention_map, plot_attention_map_all_blocks, plot_combined_attention
+from plot_attention import plot_attention_map, plot_attention_map_all_blocks, plot_combined_attention_map
 
 
 from PIL import Image
@@ -129,11 +129,10 @@ def main(
                 #     token_idx=100,
                 #     log_dir=log_dir
                 # )
-                plot_combined_attention(
+                plot_combined_attention_map(
                     image=obs["wrist_rgb"],
                     attn_weights=result["attn_weights"],
-                    source_name="base_0_rgb",
-                    block="block26",
+                    source_name="left_wrist_0_rgb",
                     log_dir=log_dir
                 )
                 # plot_attention_map_all_blocks(
@@ -143,11 +142,10 @@ def main(
                 #     token_idx=100,
                 #     log_dir=log_dir
                 # )
-                plot_combined_attention(
+                plot_combined_attention_map(
                     image=obs["base_rgb"],
                     attn_weights=result["attn_weights"],
                     source_name="base_0_rgb",
-                    block="block26",
                     log_dir=log_dir
                 )
 
