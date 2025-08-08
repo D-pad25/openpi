@@ -32,7 +32,7 @@ def main(
     log_dir: str = "/media/acrv/DanielsSSD/VLA_data",
     # log_dir: str = os.path.expanduser("~/test_logs"),
     save: bool = False,  # New argument to control saving behavior
-    plot_attention_map: bool = False,  # New argument to control attention map plotting
+    plot_attention: bool = False,  # New argument to control attention map plotting
 ):
     # Create a log directory if it doesn't exist
     if save:
@@ -106,7 +106,7 @@ def main(
             else:
                 print("No attention weights returned.")
 
-            if plot_attention_map:
+            if plot_attention:
                 plot_attention_map(
                     image=obs["wrist_rgb"],      # Input image
                     attn_weights=result["attn_weights"], # From your client
