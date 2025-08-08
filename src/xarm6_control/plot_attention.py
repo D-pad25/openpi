@@ -125,36 +125,43 @@ def plot_attention_map_all_blocks(image: np.ndarray,
         print(f"✅ Saved: {save_path}")
         plt.close()
 
-def plot_global_attention_importance(image: np.ndarray,
-                                     attn_weights: dict[str, dict[str, np.ndarray]],
-                                     source_name: str = "right_wrist_0_rgb",
-                                     block: str = "block12",
-                                     log_dir: str = "."):
+def plot_combined_attention(image: np.ndarray,
+                            attn_weights: dict[str, dict[str, np.ndarray]],
+                            source_name: str = "right_wrist_0_rgb",
+                            token_idx: int = 0,
+                            log_dir: str = "."):
     """
-    Plots a heatmap showing which parts of the image receive the most attention
-    (averaged over all heads and all tokens).
+    Combines all blocks and heads to visualize global attention importance.
     """
     os.makedirs(log_dir, exist_ok=True)
-    attn = attn_weights[source_name][block]  # shape: (heads, tokens, tokens)
-    attn_avg = attn.mean(axis=0)  # shape: (256, 256)
+    blocks = attn_weights[source_name]
 
-    # Sum over all query tokens — gives total attention received by each key token
-    importance = attn_avg.sum(axis=0)  # shape: (256,)
-    importance /= importance.max() + 1e-8  # normalize
+    combined_attn = None
+    for block_name, attn in blocks.items():
+        if attn.ndim != 3:
+            continue
+        attn_avg = attn.mean(axis=0)  # (256, 256)
+        if combined_attn is None:
+            combined_attn = attn_avg
+        else:
+            combined_attn += attn_avg
+
+    combined_attn /= len(blocks)
+
+    importance = combined_attn.sum(axis=0)  # attention received by each token
+    importance /= importance.max() + 1e-8
     importance_2d = importance.reshape(16, 16)
-
-    # Resize to image resolution
     importance_up = cv2.resize(importance_2d, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_LINEAR)
 
     # Plot
     plt.figure(figsize=(6, 6))
     plt.imshow(image / 255.0)
     plt.imshow(importance_up, cmap="hot", alpha=0.5)
-    plt.title(f"Global Attention Importance\n{source_name}, {block}")
+    plt.title("Combined Attention Across All Blocks")
     plt.axis("off")
     plt.tight_layout()
 
-    save_path = os.path.join(log_dir, f"global_attention_{source_name}_{block}.png")
+    save_path = os.path.join(log_dir, f"combined_attention_{source_name}.png")
     plt.savefig(save_path)
-    print(f"✅ Saved global attention importance map: {save_path}")
+    print(f"✅ Saved combined attention map: {save_path}")
     plt.close()
