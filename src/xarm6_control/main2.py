@@ -9,7 +9,9 @@ from xarm_env import XArmRealEnv, MockXArmEnv
 from zmq_core.camera_node import ZMQClientCamera
 import datetime
 import os
-from plot_attention import plot_attention_map
+from plot_attention import plot_attention_map, plot_attention_map_all_blocks
+
+import plot_attention
 
 from PIL import Image
 
@@ -130,6 +132,14 @@ def main(
                     token_idx=0,  # usually the [CLS] token
                     log_dir=log_dir
                 )
+                plot_attention_map_all_blocks(
+                    image=obs["base_rgb"],
+                    attn_weights=result["attn_weights"],
+                    source_name="right_wrist_0_rgb",
+                    token_idx=100,
+                    log_dir=log_dir
+                )
+                
                         
             # action_chunk = policy_client.infer(observation)["actions"]
             action_chunk = actions

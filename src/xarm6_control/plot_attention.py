@@ -52,3 +52,97 @@ def plot_attention_map(image: np.ndarray,
     plt.savefig(save_path)
     print(f"✅ Attention map saved to: {save_path}")
     plt.close()
+
+
+def plot_attention_map_all_blocks(image: np.ndarray,
+                                   attn_weights: dict[str, dict[str, np.ndarray]],
+                                   source_name: str = "right_wrist_0_rgb",
+                                   token_idx: int = 0,
+                                   log_dir: str = "."):
+    """
+    Plots averaged attention maps (across all heads) for each block,
+    overlayed on the original image.
+    Saves one image per block.
+    """
+    os.makedirs(log_dir, exist_ok=True)
+
+    # Ensure the source exists
+    if source_name not in attn_weights:
+        print(f"❌ Source '{source_name}' not found.")
+        return
+
+    for block, attn in attn_weights[source_name].items():
+        if attn.ndim != 3:
+            print(f"Skipping {block} due to unexpected shape {attn.shape}")
+            continue
+
+        # Combine all heads: shape (256, 256)
+        attn_avg = attn.mean(axis=0)  # shape: (tokens, tokens)
+
+        if token_idx >= attn_avg.shape[0]:
+            print(f"❌ Invalid token index {token_idx} for block {block}")
+            continue
+
+        attn_map = attn_avg[token_idx]  # shape: (num_tokens,)
+        num_tokens = attn_map.shape[0]
+        grid_size = int(np.sqrt(num_tokens))
+
+        if grid_size * grid_size != num_tokens:
+            print(f"❌ Token count {num_tokens} is not a perfect square in {block}")
+            continue
+
+        # Reshape and normalize
+        attn_2d = attn_map.reshape(grid_size, grid_size).copy()
+        attn_2d /= attn_2d.max() + 1e-8
+
+        # Upsample to image size
+        attn_up = cv2.resize(attn_2d, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+        # Plot
+        plt.figure(figsize=(6, 6))
+        plt.imshow(image / 255.0)
+        plt.imshow(attn_up, cmap="jet", alpha=0.5)
+        plt.title(f"Averaged Attention\n{source_name}, {block}, token={token_idx}")
+        plt.axis("off")
+        plt.tight_layout()
+
+        # Save
+        filename = f"attnmap_{source_name}_{block}_avg_token{token_idx}.png"
+        save_path = os.path.join(log_dir, filename)
+        plt.savefig(save_path)
+        print(f"✅ Saved: {save_path}")
+        plt.close()
+
+def plot_global_attention_importance(image: np.ndarray,
+                                     attn_weights: dict[str, dict[str, np.ndarray]],
+                                     source_name: str = "right_wrist_0_rgb",
+                                     block: str = "block12",
+                                     log_dir: str = "."):
+    """
+    Plots a heatmap showing which parts of the image receive the most attention
+    (averaged over all heads and all tokens).
+    """
+    os.makedirs(log_dir, exist_ok=True)
+    attn = attn_weights[source_name][block]  # shape: (heads, tokens, tokens)
+    attn_avg = attn.mean(axis=0)  # shape: (256, 256)
+
+    # Sum over all query tokens — gives total attention received by each key token
+    importance = attn_avg.sum(axis=0)  # shape: (256,)
+    importance /= importance.max() + 1e-8  # normalize
+    importance_2d = importance.reshape(16, 16)
+
+    # Resize to image resolution
+    importance_up = cv2.resize(importance_2d, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+    # Plot
+    plt.figure(figsize=(6, 6))
+    plt.imshow(image / 255.0)
+    plt.imshow(importance_up, cmap="hot", alpha=0.5)
+    plt.title(f"Global Attention Importance\n{source_name}, {block}")
+    plt.axis("off")
+    plt.tight_layout()
+
+    save_path = os.path.join(log_dir, f"global_attention_{source_name}_{block}.png")
+    plt.savefig(save_path)
+    print(f"✅ Saved global attention importance map: {save_path}")
+    plt.close()
