@@ -70,7 +70,11 @@ class Policy(BasePolicy):
             k: {kk: np.asarray(vv) for kk, vv in vv_dict.items()}
             for k, vv_dict in attn_weights.items()
         }
+        print("Actual Actions Shape before transformation:", outputs["actions"])
+        output_after_transform = self._output_transform(outputs)
+        print("Actual Actions Shape after transformation:", output_after_transform["actions"])
         return self._output_transform(outputs)
+        
 
     @property
     def metadata(self) -> dict[str, Any]:
