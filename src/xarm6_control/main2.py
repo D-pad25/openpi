@@ -122,7 +122,7 @@ def main(
 
             if plot_attention:
                 plot_attention_map(
-                    image=obs["wrist_rgb"],      # Input image
+                    image=obs["base_rgb"],      # Input image
                     attn_weights=result["attn_weights"], # From your client
                     source_name="left_wrist_0_rgb",
                     block="block12",
