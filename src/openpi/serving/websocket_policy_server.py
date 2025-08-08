@@ -10,15 +10,14 @@ import websockets.frames
 import numpy as np
 
 def convert_bfloat16_to_float32(tree):
-        """Recursively converts all bfloat16 arrays to float32 in a nested structure."""
-        if isinstance(tree, dict):
-            return {k: convert_bfloat16_to_float32(v) for k, v in tree.items()}
-        elif isinstance(tree, (list, tuple)):
-            return type(tree)(convert_bfloat16_to_float32(v) for v in tree)
-        elif isinstance(tree, np.ndarray) and tree.dtype == np.bfloat16:
-            return tree.astype(np.float32)
-        return tree
-
+    """Recursively converts all bfloat16 arrays to float32 in a nested structure."""
+    if isinstance(tree, dict):
+        return {k: convert_bfloat16_to_float32(v) for k, v in tree.items()}
+    elif isinstance(tree, (list, tuple)):
+        return type(tree)(convert_bfloat16_to_float32(v) for v in tree)
+    elif isinstance(tree, np.ndarray) and tree.dtype.name == "bfloat16":
+        return tree.astype(np.float32)
+    return tree
 class WebsocketPolicyServer:
     """Serves a policy using the websocket protocol. See websocket_client_policy.py for a client implementation.
 
