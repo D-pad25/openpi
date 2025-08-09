@@ -153,13 +153,23 @@ class Pi0FAST(_model.BaseModel):
     @at.typecheck
     def embed_inputs(
         self, obs: _model.Observation
-    ) -> tuple[at.Float[at.Array, "b s emb"], at.Bool[at.Array, "b s"], at.Int[at.Array, "b s"]]:
+    ) -> tuple[at.Float[at.Array, "b s emb"], at.Bool[at.Array, "b s"], at.Int[at.Array, "b s"], 
+               dict[str, dict[str, at.Float[at.Array, "b h q k"]]]]:
         input_mask = []
         ar_mask = []
         token_embeddings = []
+        all_attn_weights = {}
         # embed images
         for name in obs.images:
-            image_token_embeddings, _ = self.PaliGemma.img(obs.images[name], train=False)
+            image_token_embeddings, out = self.PaliGemma.img(obs.images[name], train=False)
+
+            # Get attention weights for each transformer block
+            depth = self.PaliGemma.img.module.depth  # number of transformer blocks
+            image_attn = {
+                f"block{l:02d}": out["encoder"][f"block{l:02d}"]["attn_weights"]
+                for l in range(depth)
+            }
+            all_attn_weights[name] = image_attn
 
             token_embeddings.append(image_token_embeddings)
             input_mask.append(
@@ -186,6 +196,7 @@ class Pi0FAST(_model.BaseModel):
             jnp.concatenate(token_embeddings, axis=1),
             jnp.concatenate(input_mask, axis=1),
             jnp.concatenate(ar_mask, axis=1),
+            all_attn_weights,
         )
 
     @override
@@ -197,7 +208,7 @@ class Pi0FAST(_model.BaseModel):
         )
 
         # Compute inputs: one big forward pass of prefix + suffix at once
-        input_token_embeddings, input_mask, ar_mask = self.embed_inputs(observation)
+        input_token_embeddings, input_mask, ar_mask, out = self.embed_inputs(observation)
         attn_mask = make_attn_mask(input_mask, ar_mask)
 
         # Compute one-hot targets: we predict *next* token, so shift the input tokens by one.
@@ -234,14 +245,14 @@ class Pi0FAST(_model.BaseModel):
         *,
         max_decoding_steps: int | at.Int[at.Array, ""] = 256,
         temperature: float = 0.0,
-    ) -> _model.Actions:
+    ) -> tuple[_model.Actions, dict[str, dict[str, np.ndarray]]]:
         # TODO: this is a hack to get the image keys.
         observation = _model.preprocess_observation(
             None, observation, train=False, image_keys=list(observation.images.keys())
         )
 
         # embed inputs
-        prefix_token_embeddings, prefix_mask, prefix_ar_mask = self.embed_inputs(observation)
+        prefix_token_embeddings, prefix_mask, prefix_ar_mask, attn_weights = self.embed_inputs(observation)
         prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
 
         # left to right align all input token sequences
@@ -299,4 +310,4 @@ class Pi0FAST(_model.BaseModel):
 
         # Use lax.while_loop so we can jit the full decoding loop.
         _, output_tokens, _, _, _ = jax.lax.while_loop(cond, step, (last_logit, output_tokens, kv_cache, False, 0))
-        return output_tokens
+        return output_tokens, attn_weights
