@@ -122,6 +122,18 @@ def main(
                 print("No attention weights returned.")
 
             if plot_attention:
+                attn_dir = "/home/d_pad25/Thesis/attention_maps/attn_export"
+                os.makedirs(attn_dir, exist_ok=True)
+                frame_img = obs["wrist_rgb"]          # HxWx3 uint8 (or your chosen source)
+                aw = result["attn_weights"]          # your dict: {source_name: {blockXX: (H,T,T)}}
+                # save attention + the image, compressed
+                np.savez_compressed(
+                    os.path.join(attn_dir, "attn_dump_wrist_rgb_0.npz"),
+                    image=frame_img,
+                    **{f"{src}__{blk}": arr for src, blocks in aw.items() for blk, arr in blocks.items()}
+                )
+                print("Saved:", os.path.join(attn_dir, "attn_dump_wrist_rgb_0.npz"))
+
                 plot_attention_map_all_blocks(
                     image=obs["wrist_rgb"],
                     attn_weights=result["attn_weights"],
