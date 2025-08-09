@@ -1,9 +1,17 @@
 import os
 import numpy as np
 import cv2
+
+## MATPLOTLIB 
+import matplotlib
+# matplotlib.use("Qt5Agg")
+matplotlib.use("Agg")  # purely offscreen
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
+
 from typing import Dict
+
+
 
 def _infer_grid(n):
     g = int(np.sqrt(n))

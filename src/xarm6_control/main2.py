@@ -149,15 +149,15 @@ def main(
                     log_dir=log_dir
                 )
 
-                interactive_attn_viewer_token_block(
-                    image=obs["wrist_rgb"],
-                    attn_weights=result["attn_weights"],
-                    source_name="left_wrist_0_rgb",
-                    start_block="block_26",
-                    combine_heads="mean",                 # try "max" or "head"
-                    head_index=7,                         # used only if combine_heads="head"
-                    log_dir=log_dir
-                )
+                # interactive_attn_viewer_token_block(
+                #     image=obs["wrist_rgb"],
+                #     attn_weights=result["attn_weights"],
+                #     source_name="left_wrist_0_rgb",
+                #     start_block="block_26",
+                #     combine_heads="mean",                 # try "max" or "head"
+                #     head_index=7,                         # used only if combine_heads="head"
+                #     log_dir=log_dir
+                # )
 
             # action_chunk = policy_client.infer(observation)["actions"]
             action_chunk = actions

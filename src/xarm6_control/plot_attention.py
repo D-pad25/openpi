@@ -1,4 +1,7 @@
 import os
+import matplotlib
+# matplotlib.use("Qt5Agg")
+matplotlib.use("Agg")  # purely offscreen
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
