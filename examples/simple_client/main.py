@@ -68,7 +68,7 @@ def main(args: Args) -> None:
     if args.plot_attention:
         attn_dir = "/home/d_pad25/Thesis/attention_maps/attn_export2"
         os.makedirs(attn_dir, exist_ok=True)
-        frame_img = obs["wrist_image_left"]          # HxWx3 uint8 (or your chosen source)
+        frame_img = obs["observation/wrist_image_left"]          # HxWx3 uint8 (or your chosen source)
         aw = result["attn_weights"]          # your dict: {source_name: {blockXX: (H,T,T)}}
         # save attention + the image, compressed
         np.savez_compressed(
