@@ -3,7 +3,7 @@ import enum
 import logging
 import os
 import time
-from tkinter import Image
+from PIL import Image
 
 import numpy as np
 from openpi_client import websocket_client_policy as _websocket_client_policy
