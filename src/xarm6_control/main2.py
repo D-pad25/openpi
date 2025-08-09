@@ -10,7 +10,7 @@ from zmq_core.camera_node import ZMQClientCamera
 import datetime
 import os
 from plot_attention import plot_attention_map, plot_attention_map_all_blocks, plot_combined_attention_map, plot_attention_map_all_blocksv2
-
+from plot_attention_live import interactive_attn_viewer_token_block
 
 from PIL import Image
 
@@ -33,7 +33,7 @@ def main(
     step_through_instructions: bool = False,  # New argument
     delta_threshold: float = 0.25,  # New argument for delta threshold
     # log_dir: str = "/media/acrv/DanielsSSD/VLA_data",
-    log_dir: str = os.path.expanduser("~/Thesis/attention_maps/v7"),
+    log_dir: str = os.path.expanduser("~/Thesis/attention_maps/v8"),
     # log_dir: str = os.path.expanduser("~/test_logs"),
     save: bool = False,  # New argument to control saving behavior
     plot_attention: bool = False,  # New argument to control attention map plotting
@@ -146,6 +146,16 @@ def main(
                     image=obs["base_rgb"],
                     attn_weights=result["attn_weights"],
                     source_name="base_0_rgb",
+                    log_dir=log_dir
+                )
+
+                interactive_attn_viewer_token_block(
+                    image=obs["wrist_rgb"],
+                    attn_weights=result["attn_weights"],
+                    source_name="left_wrist_0_rgb",
+                    start_block="block_26",
+                    combine_heads="mean",                 # try "max" or "head"
+                    head_index=7,                         # used only if combine_heads="head"
                     log_dir=log_dir
                 )
 
