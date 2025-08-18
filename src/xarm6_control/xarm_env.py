@@ -82,7 +82,7 @@ class GripperClientAsync:
         assert 0.0 <= value <= 1.0, "Gripper value must be between 0.0 and 1.0"
         return await self.send_command("SET", round(value, 3))
 
-    async def get_gripper_position(self):
+    async def receive_gripper_position(self):
         return await self.send_command("GET")
     
 class XArmRealEnv:
