@@ -69,7 +69,7 @@ class GripperClientAsync:
             print("[Client] Disconnected")
             self.reader = self.writer = None
 
-    async def send_command(self, cmd_type: str, payload=None):
+    async def send_gripper_command(self, cmd_type: str, payload=None):
         await self.connect()
         message = json.dumps({"cmd": cmd_type, "value": payload})
         self.writer.write((message + "\n").encode())
@@ -80,10 +80,10 @@ class GripperClientAsync:
 
     async def set_gripper(self, value: float):
         assert 0.0 <= value <= 1.0, "Gripper value must be between 0.0 and 1.0"
-        return await self.send_command("SET", round(value, 3))
+        return await self.send_gripper_command("SET", round(value, 3))
 
     async def receive_gripper_position(self):
-        return await self.send_command("GET")
+        return await self.send_gripper_command("GET")
     
 class XArmRealEnv:
     def __init__(self, ip="192.168.1.203", camera_dict=None):
