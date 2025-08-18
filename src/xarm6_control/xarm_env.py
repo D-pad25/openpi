@@ -92,7 +92,7 @@ class XArmRealEnv:
         self._initialize_arm()
         print("xArm connected and initialized.")
         print("Setting up gripper client...")
-        self.gripper = GripperClient()
+        self.gripper = GripperClientAsync()
         print("Gripper client initialized.")
         self.camera_dict = camera_dict or {}
 
