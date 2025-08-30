@@ -27,11 +27,11 @@ import tensorflow_datasets as tfds
 import tyro
 
 # Change this later
-REPO_NAME = "dpad25/agrivla_prune_tomatoes_v1"  # just a name  # Name of the output dataset, also used for the Hugging Face Hub
+REPO_NAME = "dpad25/agrivla_pick_tomatoes_v1"  # just a name  # Name of the output dataset, also used for the Hugging Face Hub
 OUTPUT_ROOT = Path("~/data/lerobot").expanduser()
 OUTPUT_PATH = OUTPUT_ROOT / REPO_NAME
 RAW_DATASET_NAMES = [
-    "agrivla_dataset_v1"
+    "agrivla_dataset_v2"
 ]  # For simplicity we will combine multiple Libero datasets into one training dataset
 
 
