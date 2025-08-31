@@ -519,6 +519,36 @@ _CONFIGS = [
         ema_decay=None,
     ),
 
+    TrainConfig(
+        name="pi0base_lora_xarm6_round2_fulldataset",
+        # Here is an example of loading a pi0 model for LoRA fine-tuning.
+        model=pi0.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"),
+        data=LeRobotxArm6DataConfig(
+            # The repo_id is used to load the dataset.
+            repo_id="dpad25/agrivla_pick_tomatoes_v1",
+            # repo_id=str(pathlib.Path("~/data/lerobot").expanduser()),
+
+            # The base config is used to load the dataset
+            base_config=DataConfig(
+                local_files_only=True,  # Set to True for local-only datasets.
+                prompt_from_task=True,
+            ),
+        ),
+        # Here you define which pre-trained checkpoint you want to load to initialize the model.
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        # The number of training steps to run.
+        num_train_steps=30_000,
+        # The freeze filter defines which parameters should be frozen during training.
+        # We have a convenience function in the model config that returns the default freeze filter
+        # for the given model config for LoRA finetuning. Just make sure it matches the model config
+        # you chose above.
+        freeze_filter=pi0.Pi0Config(
+            paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"
+        ).get_freeze_filter(),
+        # Turn off EMA for LoRA finetuning.
+        ema_decay=None,
+    ),
+
     #
     # Inference Aloha configs.
     #
