@@ -13,6 +13,36 @@ This module provides real-time control and observation utilities for the xArm6 r
 
 ---
 
+## Data Transformation
+
+### How to transform data from RLDS into Lerobot
+To transform the data, run:
+```bash
+uv run examples/libero/convert_libero_data_to_lerobot.py --data_dir /home/n10813934/data/tfds_datasets
+```
+
+This will convert the data stored in RLDS into pi0's lerobot format. The resuling dataset will be stored in:
+`
+/home/n10813934/.cache/huggingface/lerobot/dpad25/agrivla_pick_tomatoes_v1
+`
+
+### How to confirm data transform
+A custom script has been developed (`inspect_lerobot_dataset.py`). To run this script, you will need to pass in the repo_id and the root directory for the dataset you have just created. For this example, I ran:
+```bash
+uv run examples/libero/inspect_lerobot_dataset.py \
+  --repo_id dpad25/agrivla_pick_tomatoes_v1 \
+  --root /home/n10813934/.cache/huggingface/lerobot/dpad25/agrivla_pick_tomatoes_v1
+```
+
+## Training
+When you want to train, make sure to first update the traininig config located in `config.py` to include you updated name and dataset path. 
+
+Then run:
+```bash
+uv run scripts/compute_norm_stats.py --config-name pi0base_lora_xarm6_round2_fulldataset
+```
+
+Replacing `pi0base_lora_xarm6_round2_fulldataset` with the name of your config
 ## 🚀 Running a Policy on xArm6
 
 ### 1. Run the Policy Server on the HPC
