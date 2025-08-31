@@ -3,7 +3,7 @@
  #PBS -N EVAL
 
  #PBS -l walltime=18:00:00
- #PBS -l select=1:ncpus=4:ngpus=1:gpu_id=H100:mem=96gb
+ #PBS -l select=1:ncpus=4:ngpus=1:gpu_id=H100:mem=80gb
 
 # ─── Setup working directory ──────────────────────────────────────────────
  cd /home/n10813934/gitRepos/openpi  # Adjust path to your actual repo
