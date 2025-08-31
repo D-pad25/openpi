@@ -26,13 +26,13 @@ import time
 
 # -------- import client (GripperClientAsync) --------
 try:
-    client_mod = importlib.import_module("gripper_client_async")
+    client_mod = importlib.import_module("gripper_client_async_v2")
     GripperClientAsync = getattr(client_mod, "GripperClientAsync")
 except Exception as e:
     sys.stderr.write(
-        "❌ Could not import GripperClientAsync from gripper_client_async.py\n"
+        "❌ Could not import GripperClientAsync from gripper_client_async_v2.py\n"
         f"Error: {e}\n"
-        "Make sure gripper_client_async.py is in the same directory or on PYTHONPATH.\n"
+        "Make sure gripper_client_async_v2.py is in the same directory or on PYTHONPATH.\n"
     )
     sys.exit(1)
 
