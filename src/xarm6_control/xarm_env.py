@@ -10,7 +10,7 @@ import datetime
 import socket
 import asyncio
 import json
-
+from gripper_client_async_v2 import GripperClientAsync
 
 class GripperClient:
     def __init__(self, host='127.0.0.1', port=22345):
@@ -50,7 +50,7 @@ class GripperClient:
         # print(f"[Client] Gripper state: {response}")
         return response
 
-class GripperClientAsync:
+class GripperClientAsync_old:
     def __init__(self, host='127.0.0.1', port=22345):
         self.host = host
         self.port = port
@@ -92,7 +92,7 @@ class XArmRealEnv:
         self._initialize_arm()
         print("xArm connected and initialized.")
         print("Setting up gripper client...")
-        self.gripper = GripperClient()
+        self.gripper = GripperClientAsync()
         print("Gripper client initialized.")
         self.camera_dict = camera_dict or {}
 
