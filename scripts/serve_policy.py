@@ -19,6 +19,7 @@ class EnvMode(enum.Enum):
     DROID = "droid"
     LIBERO = "libero"
     XARM = "xarm"
+    XARM_R2_FULL = "xarm_r2_full"
 
 
 @dataclasses.dataclass
@@ -77,6 +78,10 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     EnvMode.XARM: Checkpoint(
         config="pi0_xarm6_low_mem_finetune",
         dir="checkpoints/pi0_xarm6_low_mem_finetune/pi0_xarm6_lora_pickTomatoes_noFrozenFrames/29999",
+    ),
+    EnvMode.XARM_R2_FULL: Checkpoint(
+        config="pi0base_lora_xarm6_round2_fulldataset",
+        dir="checkpoints/pi0base_lora_xarm6_round2_fulldataset/pi0base_lora_xarm6_round2_fulldataset/29999",
     ),
 }
 
