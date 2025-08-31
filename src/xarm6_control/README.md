@@ -43,6 +43,24 @@ uv run scripts/compute_norm_stats.py --config-name pi0base_lora_xarm6_round2_ful
 ```
 
 Replacing `pi0base_lora_xarm6_round2_fulldataset` with the name of your config
+
+### Weights and Biases
+The following line exists in the train basch script:
+```bash
+source ~/.wandb_secrets
+```
+
+This line gets the following enviroment variables:
+
+```bash
+cat <<'EOF' > ~/.wandb_secrets
+# W&B authentication (private)
+export WANDB_API_KEY=xxxxxxxx (can be found at [text](https://wandb.ai/authorize))
+export WANDB_MODE=online
+export WANDB_PROJECT=agrivla
+EOF
+```
+
 ## 🚀 Running a Policy on xArm6
 
 ### 1. Run the Policy Server on the HPC
