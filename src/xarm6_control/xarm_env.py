@@ -118,7 +118,7 @@ class XArmRealEnv:
     '''
 
     def _get_normalized_gripper_position(self) -> float:
-        raw = self.gripper.receive_gripper_position()
+        raw = self.gripper.get()
         try:
             # Try JSON first (server path, returns 0..1)
             if isinstance(raw, (bytes, bytearray)):
