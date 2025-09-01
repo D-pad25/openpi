@@ -3,7 +3,7 @@
 Async JSON line protocol client for normalized-position gripper control.
 """
 
-import asyncio
+import asyncio, threading, concurrent.futures
 import json
 from typing import Optional
 
@@ -54,15 +54,23 @@ class GripperClientAsync:
 
 
 # ---------- Optional sync-friendly wrapper ----------
+_loop = None
+_thread = None
+
+def _ensure_loop():
+    global _loop, _thread
+    if _loop and _loop.is_running():
+        return _loop
+
+    _loop = asyncio.new_event_loop()
+    _thread = threading.Thread(target=_loop.run_forever, daemon=True)
+    _thread.start()
+    return _loop
+
 def _run_coro(coro):
-    try:
-        loop = asyncio.get_running_loop()
-        # We are inside an event loop → schedule in a threadsafe way
-        fut = asyncio.run_coroutine_threadsafe(coro, loop)
-        return fut.result()
-    except RuntimeError:
-        # No running loop → safe to just run normally
-        return asyncio.run(coro)
+    loop = _ensure_loop()
+    fut = asyncio.run_coroutine_threadsafe(coro, loop)
+    return fut.result()
 
 class GripperClient:
     """Sync convenience wrapper. Prefer GripperClientAsync in async code."""
