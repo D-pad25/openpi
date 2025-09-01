@@ -57,14 +57,12 @@ class GripperClientAsync:
 def _run_coro(coro):
     try:
         loop = asyncio.get_running_loop()
-    except RuntimeError:
-        # No loop running → safe to start one
-        return asyncio.run(coro)
-    else:
-        # Loop already running → schedule task and block until done
+        # We are inside an event loop → schedule in a threadsafe way
         fut = asyncio.run_coroutine_threadsafe(coro, loop)
         return fut.result()
-
+    except RuntimeError:
+        # No running loop → safe to just run normally
+        return asyncio.run(coro)
 
 class GripperClient:
     """Sync convenience wrapper. Prefer GripperClientAsync in async code."""
