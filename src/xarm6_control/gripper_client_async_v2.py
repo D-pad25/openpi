@@ -58,9 +58,12 @@ def _run_coro(coro):
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
+        # No loop running → safe to start one
         return asyncio.run(coro)
     else:
-        return loop.create_task(coro)
+        # Loop already running → schedule task and block until done
+        fut = asyncio.run_coroutine_threadsafe(coro, loop)
+        return fut.result()
 
 
 class GripperClient:
