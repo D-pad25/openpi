@@ -10,9 +10,10 @@ import datetime
 import socket
 import asyncio
 import json
-from gripper_client_async_v2 import GripperClientAsync
+from gripper_client_async_v2 import GripperClient
 # from dummy_gripper import GripperClientAsync
 
+'''
 class GripperClient:
     def __init__(self, host='127.0.0.1', port=22345):
         self.host = host
@@ -50,7 +51,7 @@ class GripperClient:
         response = self.send_command("GET")
         # print(f"[Client] Gripper state: {response}")
         return response
-
+'''
 class GripperClientAsync_old:
     def __init__(self, host='127.0.0.1', port=22345):
         self.host = host
@@ -93,7 +94,7 @@ class XArmRealEnv:
         self._initialize_arm()
         print("xArm connected and initialized.")
         print("Setting up gripper client...")
-        self.gripper = GripperClientAsync()
+        self.gripper = GripperClient()
         print("Gripper client initialized.")
         self.camera_dict = camera_dict or {}
 
@@ -118,21 +119,14 @@ class XArmRealEnv:
     '''
 
     def _get_normalized_gripper_position(self) -> float:
-        raw = self.gripper.get()
         try:
-            # Try JSON first (server path, returns 0..1)
-            if isinstance(raw, (bytes, bytearray)):
-                raw = raw.decode()
-            d = json.loads(raw)
-            pos = d.get("position", d.get("last_cmd", 0.0))
-            return float(pos)  # already normalized
-        except Exception:
-            # Fallback: dummy/raw path ("0..255")
-            try:
-                return max(0.0, min(1.0, float(raw) / 255.0))
-            except Exception:
-                print(f"[WARN] Failed to parse gripper state: '{raw}'")
-                return 0.0
+            resp = self.gripper.get()
+            pos = resp.get("position", resp.get("last_cmd", 0.0))
+            return max(0.0, min(1.0, float(pos)))
+        except Exception as e:
+            print(f"[WARN] Failed to parse gripper state: {e}")
+            return 0.0
+
 
 
     def _get_joint_position(self):
@@ -205,7 +199,7 @@ class XArmRealEnv:
         # print(f"[STEP] Joint action (deg): {joint_action_deg}, Gripper action: {gripper_action:.3f}")
         self.arm.set_servo_angle_j(joint_action, is_radian=True, wait=False)
         # self.gripper.send_gripper_command(gripper_action) # THIS WAS THE OLD WAY
-        self.gripper.get(gripper_action) 
+        self.gripper.set(gripper_action) 
         # self.arm.set_gripper_position(gripper_mm, wait=False)
     
     def step_through_interpolated_trajectory(self,
