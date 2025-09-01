@@ -68,8 +68,8 @@ class GripperSocketServerAsync:
 
     # -------------------- ROS callback --------------------
     def _gripper_cb(self, msg: Float32):
-        with self._pos_lock:
-            self._latest_pos_norm = clamp01(msg.data)
+        norm = float(msg.data) / 255.0
+        self._latest_pos_norm = clamp01(norm)
 
     # -------------------- TCP handling --------------------
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):

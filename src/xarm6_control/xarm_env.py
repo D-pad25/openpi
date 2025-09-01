@@ -10,8 +10,8 @@ import datetime
 import socket
 import asyncio
 import json
-# from gripper_client_async_v2 import GripperClientAsync
-from dummy_gripper import GripperClientAsync
+from gripper_client_async_v2 import GripperClientAsync
+# from dummy_gripper import GripperClientAsync
 
 class GripperClient:
     def __init__(self, host='127.0.0.1', port=22345):
