@@ -10,8 +10,8 @@ import datetime
 import socket
 import asyncio
 import json
-from gripper_client_async_v2 import GripperClientAsync
-# from dummy_gripper import GripperClientAsync
+# from gripper_client_async_v2 import GripperClientAsync
+from dummy_gripper import GripperClientAsync
 
 class GripperClient:
     def __init__(self, host='127.0.0.1', port=22345):
@@ -105,6 +105,7 @@ class XArmRealEnv:
         self.arm.set_collision_sensitivity(0)
         self.arm.set_state(state=0)
 
+    '''
     def _get_normalized_gripper_position(self) -> float:
         """Returns the gripper position as a normalized float in [0.0, 1.0]."""
         raw_response = self.gripper.receive_gripper_position()
@@ -114,7 +115,25 @@ class XArmRealEnv:
         except Exception:
             print(f"[WARN] Failed to parse gripper state: '{raw_response}'")
             return 0.0
-        
+    '''
+
+    def _get_normalized_gripper_position(self) -> float:
+        raw = self.gripper.receive_gripper_position()
+        try:
+            # Try JSON first (server path, returns 0..1)
+            if isinstance(raw, (bytes, bytearray)):
+                raw = raw.decode()
+            d = json.loads(raw)
+            pos = d.get("position", d.get("last_cmd", 0.0))
+            return float(pos)  # already normalized
+        except Exception:
+            # Fallback: dummy/raw path ("0..255")
+            try:
+                return max(0.0, min(1.0, float(raw) / 255.0))
+            except Exception:
+                print(f"[WARN] Failed to parse gripper state: '{raw}'")
+                return 0.0
+
 
     def _get_joint_position(self):
         code, joint_position = self.arm.get_servo_angle(is_radian=True)
