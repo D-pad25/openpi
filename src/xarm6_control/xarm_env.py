@@ -204,7 +204,8 @@ class XArmRealEnv:
         # print(f"[STEP] Joint action: {joint_action}, Gripper action: {gripper_action}")
         # print(f"[STEP] Joint action (deg): {joint_action_deg}, Gripper action: {gripper_action:.3f}")
         self.arm.set_servo_angle_j(joint_action, is_radian=True, wait=False)
-        self.gripper.send_gripper_command(gripper_action)
+        # self.gripper.send_gripper_command(gripper_action) # THIS WAS THE OLD WAY
+        self.gripper.get(gripper_action) 
         # self.arm.set_gripper_position(gripper_mm, wait=False)
     
     def step_through_interpolated_trajectory(self,
