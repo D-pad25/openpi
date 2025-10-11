@@ -37,7 +37,7 @@ echo "▶️  Converting spec: $SPEC"
 uv run examples/libero/convert_libero.py \
   --data_dir "$TFDS_DIR" \
   --repo_prefix "dpad25/agrivla_pi0" \
-  --specs "[$SPEC]" \
+  --specs "$SPEC" \
   --seed 42 \
   --clobber
 
