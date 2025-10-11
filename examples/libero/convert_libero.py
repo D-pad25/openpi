@@ -59,10 +59,17 @@ def _peek_step_np(ep) -> Optional[dict]:
 
 def _episode_crop(ep) -> str:
     """Return 'tomato' or 'chilli'. v2 has no crop_type ⇒ default tomato."""
+    def decode_crop(val):
+        if isinstance(val, (np.integer, int)):
+            # Map class index to label name
+            return "chilli" if int(val) == 1 else "tomato"
+        c = _to_text(val).lower().strip()
+        return c if c else None
+
     # 1) episode-level metadata
     try:
         if "episode_metadata" in ep and "crop_type" in ep["episode_metadata"]:
-            c = _to_text(ep["episode_metadata"]["crop_type"]).lower().strip()
+            c = decode_crop(ep["episode_metadata"]["crop_type"])
             if c:
                 return c
     except Exception:
@@ -73,7 +80,7 @@ def _episode_crop(ep) -> str:
     if s0 is not None:
         try:
             if "observation" in s0 and "crop_type" in s0["observation"]:
-                c = _to_text(s0["observation"]["crop_type"]).lower().strip()
+                c = decode_crop(s0["observation"]["crop_type"])
                 if c:
                     return c
         except Exception:
@@ -234,7 +241,7 @@ def build_one_spec(args: Args, spec: str):
 def main(args: Args):
     random.seed(args.seed)
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
-    
+
     # If the user passed one spec (like from PBS job array)
     # ensure we only run that one, not all defaults.
     if len(args.specs) == 1:
