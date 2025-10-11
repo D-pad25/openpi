@@ -14,6 +14,9 @@ REPO_DIR="/home/n10813934/gitRepos/openpi"
 TFDS_DIR="/home/n10813934/data/tfds_datasets"
 LOG_DIR="/home/n10813934/logs"
 mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/agrivla_to_lerobot_${PBS_ARRAY_INDEX}.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "Logging to $LOG_FILE"
 
 cd "$REPO_DIR"
 source .venv/bin/activate

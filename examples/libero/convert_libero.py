@@ -60,8 +60,13 @@ def _peek_step_np(ep) -> Optional[dict]:
 def _episode_crop(ep) -> str:
     """Return 'tomato' or 'chilli'. v2 has no crop_type ⇒ default tomato."""
     def decode_crop(val):
+        # Tensor → numpy → int if possible
+        if tf.is_tensor(val):
+            val = val.numpy()
+        if isinstance(val, (np.ndarray,)):
+            if val.size == 1:
+                val = val.item()
         if isinstance(val, (np.integer, int)):
-            # Map class index to label name
             return "chilli" if int(val) == 1 else "tomato"
         c = _to_text(val).lower().strip()
         return c if c else None
