@@ -27,7 +27,7 @@ import tensorflow_datasets as tfds
 import tyro
 
 # Change this later
-REPO_NAME = "dpad25/agrivla_pick_tomatoes_v1"  # just a name  # Name of the output dataset, also used for the Hugging Face Hub
+REPO_NAME = "dpad25/agrivla_pick_tomatoes_v2_test"  # just a name  # Name of the output dataset, also used for the Hugging Face Hub
 OUTPUT_ROOT = Path("~/data/lerobot").expanduser()
 OUTPUT_PATH = OUTPUT_ROOT / REPO_NAME
 RAW_DATASET_NAMES = [
