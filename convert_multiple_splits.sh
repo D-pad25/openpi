@@ -4,7 +4,7 @@
 #PBS -l walltime=24:00:00
 #PBS -l select=1:ncpus=24:ngpus=1:gpu_id=A100:mem=32gb
 #PBS -j oe
-#PBS -o /home/n10813934/logs/agrivla_to_lerobot.$PBS_JOBID.log
+#PBS -o /home/n10813934/logs/agrivla_to_lerobot.log  # placeholder; actual log handled below
 
 set -euo pipefail
 
@@ -18,12 +18,17 @@ TFDS_DIR="/home/n10813934/data/tfds_datasets"
 cd "$REPO_DIR"
 source .venv/bin/activate
 
+# ─── Define log path dynamically ───────────────────────────────
+LOG_DIR="/home/n10813934/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/agrivla_to_lerobot.${PBS_JOBID}.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "Logging to $LOG_FILE"
+
 # Allow lots of file handles for parallel image writers
 ulimit -n 4096 || true
 
 # ─── Run conversion (builds all specs by default) ───────────────────────────
-# Adjust the script path below to where you saved the proposed Python script.
-# (e.g., examples/agrivla/convert_agrivla_to_lerobot.py)
 uv run examples/libero/convert_libero.py \
   --data_dir "$TFDS_DIR" \
   --repo_prefix "dpad25/agrivla_pi0" \
