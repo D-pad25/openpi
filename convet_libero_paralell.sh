@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #PBS -N AGRIVLA_TO_LEROBOT
 #PBS -l walltime=6:00:00
-#PBS -l select=1:ncpus=12:ngpus=1:gpu_id=A100:mem=64gb
+#PBS -l select=1:ncpus=12:ngpus=1:gpu_id=A100:mem=100gb
 #PBS -J 1-8
 #PBS -j oe
 #PBS -o /home/n10813934/logs/agrivla_to_lerobot_${PBS_ARRAY_INDEX}.log
