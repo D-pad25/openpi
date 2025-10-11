@@ -174,7 +174,14 @@ def _create_dataset(repo_id: str, clobber: bool) -> LeRobotDataset:
 
 def _write_episode_to_lerobot(ds: LeRobotDataset, ep, crop: str):
     # Stream frames
-    for step_np in ep["steps"].as_numpy_iterator():
+    steps = ep["steps"]
+    # Case 1: TF dataset
+    if hasattr(steps, "as_numpy_iterator"):
+        iterator = steps.as_numpy_iterator()
+    # Case 2: already numpy generator / iterable
+    else:
+        iterator = iter(steps)
+    for step_np in iterator:
         ds.add_frame(
             {
                 "image": step_np["observation"]["image"],         # <<< maybe rename to base_rgb
@@ -201,7 +208,8 @@ def build_one_spec(args: Args, spec: str):
         # raw_ds = raw_ds.shuffle(2048, seed=args.seed, reshuffle_each_iteration=False)
         # convert to a list of examples (shuffled via Python, not TFDS)
         all_eps = list(tfds.as_numpy(raw_ds))
-        random.shuffle(all_eps)  # ✅ lightweight randomization
+        rng = random.Random(args.seed)
+        rng.shuffle(all_eps)
 
         for ep in all_eps:
             crop = _episode_crop(ep)
@@ -213,8 +221,13 @@ def build_one_spec(args: Args, spec: str):
 
             # quick frame count by iterating once (cheap; we stream anyway)
             n_frames = 0
-            for _ in ep["steps"].as_numpy_iterator():
-                n_frames += 1
+            steps = ep["steps"]
+            if hasattr(steps, "as_numpy_iterator"):
+                iterator = steps.as_numpy_iterator()
+            else:
+                iterator = iter(steps)
+
+            n_frames = sum(1 for _ in iterator)
             counts["frames"] += n_frames
 
             # write episode (iterate again to stream frames)
