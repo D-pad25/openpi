@@ -52,25 +52,10 @@ def _to_text(x) -> str:
     return str(x)
 
 def _peek_step_np(ep) -> Optional[dict]:
-    """Return the first step of an episode (works for both tf.data.Dataset and Python iterables)."""
-    steps = ep.get("steps")
-    if steps is None:
-        return None
-
     try:
-        # Case 1: TensorFlow dataset
-        if hasattr(steps, "take"):
-            return next(steps.take(1).as_numpy_iterator())
-        # Case 2: Python iterable (generator)
-        else:
-            first = next(iter(steps))
-            # Rebuild generator by chaining the first element back (so we don’t consume it)
-            from itertools import chain
-            ep["steps"] = chain([first], steps)
-            return first
+        return next(ep["steps"].take(1).as_numpy_iterator())
     except StopIteration:
         return None
-
 
 def _episode_crop(ep) -> str:
     """Return 'tomato' or 'chilli'. v2 has no crop_type ⇒ default tomato."""
@@ -174,14 +159,7 @@ def _create_dataset(repo_id: str, clobber: bool) -> LeRobotDataset:
 
 def _write_episode_to_lerobot(ds: LeRobotDataset, ep, crop: str):
     # Stream frames
-    steps = ep["steps"]
-    # Case 1: TF dataset
-    if hasattr(steps, "as_numpy_iterator"):
-        iterator = steps.as_numpy_iterator()
-    # Case 2: already numpy generator / iterable
-    else:
-        iterator = iter(steps)
-    for step_np in iterator:
+    for step_np in ep["steps"].as_numpy_iterator():
         ds.add_frame(
             {
                 "image": step_np["observation"]["image"],         # <<< maybe rename to base_rgb
@@ -205,13 +183,9 @@ def build_one_spec(args: Args, spec: str):
     for raw_name in RAW_DATASET_NAMES:
         print(f"📦 Loading TFDS dataset: {raw_name}")
         raw_ds = tfds.load(raw_name, data_dir=args.data_dir, split="train", shuffle_files=True)
-        # raw_ds = raw_ds.shuffle(2048, seed=args.seed, reshuffle_each_iteration=False)
-        # convert to a list of examples (shuffled via Python, not TFDS)
-        all_eps = list(tfds.as_numpy(raw_ds))
-        rng = random.Random(args.seed)
-        rng.shuffle(all_eps)
+        raw_ds = raw_ds.shuffle(900, seed=args.seed, reshuffle_each_iteration=False)
 
-        for ep in all_eps:
+        for ep in raw_ds:
             crop = _episode_crop(ep)
             include, chilli_selected = _should_include(
                 crop, chilli_selected, chilli_limit, include_tomatoes, include_chillis
@@ -221,13 +195,8 @@ def build_one_spec(args: Args, spec: str):
 
             # quick frame count by iterating once (cheap; we stream anyway)
             n_frames = 0
-            steps = ep["steps"]
-            if hasattr(steps, "as_numpy_iterator"):
-                iterator = steps.as_numpy_iterator()
-            else:
-                iterator = iter(steps)
-
-            n_frames = sum(1 for _ in iterator)
+            for _ in ep["steps"].as_numpy_iterator():
+                n_frames += 1
             counts["frames"] += n_frames
 
             # write episode (iterate again to stream frames)
