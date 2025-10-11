@@ -59,18 +59,27 @@ def _peek_step_np(ep) -> Optional[dict]:
 
 def _episode_crop(ep) -> str:
     """Return 'tomato' or 'chilli'. v2 has no crop_type ⇒ default tomato."""
-    # 1) episode-level
-    if "crop_type" in ep:
-        c = _to_text(ep["crop_type"]).lower().strip()
-        if c:
-            return c
-    # 2) step-level (peek step 0)
+    # 1) episode-level metadata
+    try:
+        if "episode_metadata" in ep and "crop_type" in ep["episode_metadata"]:
+            c = _to_text(ep["episode_metadata"]["crop_type"]).lower().strip()
+            if c:
+                return c
+    except Exception:
+        pass
+
+    # 2) step-level observation (peek first step)
     s0 = _peek_step_np(ep)
-    if s0 is not None and "crop_type" in s0:
-        c = _to_text(s0["crop_type"]).lower().strip()
-        if c:
-            return c
-    # 3) default (v2 path)
+    if s0 is not None:
+        try:
+            if "observation" in s0 and "crop_type" in s0["observation"]:
+                c = _to_text(s0["observation"]["crop_type"]).lower().strip()
+                if c:
+                    return c
+        except Exception:
+            pass
+
+    # 3) default for v2
     return "tomato"
 
 def _episode_instruction(ep) -> str:
@@ -225,8 +234,17 @@ def build_one_spec(args: Args, spec: str):
 def main(args: Args):
     random.seed(args.seed)
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
-    for spec in args.specs:
+    
+    # If the user passed one spec (like from PBS job array)
+    # ensure we only run that one, not all defaults.
+    if len(args.specs) == 1:
+        spec = args.specs[0]
+        print(f"🧩 Running single-spec mode: {spec}")
         build_one_spec(args, spec)
+    else:
+        print(f"🧩 Running multi-spec mode: {args.specs}")
+        for spec in args.specs:
+            build_one_spec(args, spec)
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
