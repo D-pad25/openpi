@@ -2,7 +2,7 @@
 
 #PBS -N AGRIVLA_TO_LEROBOT
 #PBS -l walltime=24:00:00
-#PBS -l select=1:ncpus=24:ngpus=1:gpu_id=A100:mem=32gb
+#PBS -l select=1:ncpus=24:ngpus=1:gpu_id=A100:mem=200gb
 #PBS -j oe
 #PBS -o /home/n10813934/logs/agrivla_to_lerobot.log
 
