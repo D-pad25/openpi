@@ -4,7 +4,7 @@
 #PBS -l walltime=24:00:00
 #PBS -l select=1:ncpus=24:ngpus=1:gpu_id=A100:mem=32gb
 #PBS -j oe
-#PBS -o /home/n10813934/logs/agrivla_to_lerobot.log  # placeholder; actual log handled below
+#PBS -o /home/n10813934/logs/agrivla_to_lerobot.log
 
 set -euo pipefail
 
