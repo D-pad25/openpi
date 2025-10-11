@@ -185,7 +185,7 @@ def build_one_spec(args: Args, spec: str):
         raw_ds = tfds.load(raw_name, data_dir=args.data_dir, split="train", shuffle_files=True)
         # raw_ds = raw_ds.shuffle(2048, seed=args.seed, reshuffle_each_iteration=False)
         # convert to a list of examples (shuffled via Python, not TFDS)
-        all_eps = list(raw_ds.as_numpy_iterator())
+        all_eps = list(tfds.as_numpy(raw_ds))
         random.shuffle(all_eps)  # ✅ lightweight randomization
 
         for ep in all_eps:
