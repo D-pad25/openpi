@@ -52,10 +52,25 @@ def _to_text(x) -> str:
     return str(x)
 
 def _peek_step_np(ep) -> Optional[dict]:
+    """Return the first step of an episode (works for both tf.data.Dataset and Python iterables)."""
+    steps = ep.get("steps")
+    if steps is None:
+        return None
+
     try:
-        return next(ep["steps"].take(1).as_numpy_iterator())
+        # Case 1: TensorFlow dataset
+        if hasattr(steps, "take"):
+            return next(steps.take(1).as_numpy_iterator())
+        # Case 2: Python iterable (generator)
+        else:
+            first = next(iter(steps))
+            # Rebuild generator by chaining the first element back (so we don’t consume it)
+            from itertools import chain
+            ep["steps"] = chain([first], steps)
+            return first
     except StopIteration:
         return None
+
 
 def _episode_crop(ep) -> str:
     """Return 'tomato' or 'chilli'. v2 has no crop_type ⇒ default tomato."""
