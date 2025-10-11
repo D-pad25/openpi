@@ -39,6 +39,6 @@ uv run examples/libero/convert_libero.py \
   --repo_prefix "dpad25/agrivla_pi0" \
   --specs "[$SPEC]" \
   --seed 42 \
-  --clobber True
+  --clobber
 
 echo "✅ Conversion complete for $SPEC at $(date)"
