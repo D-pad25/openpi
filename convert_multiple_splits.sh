@@ -24,7 +24,7 @@ ulimit -n 4096 || true
 # ─── Run conversion (builds all specs by default) ───────────────────────────
 # Adjust the script path below to where you saved the proposed Python script.
 # (e.g., examples/agrivla/convert_agrivla_to_lerobot.py)
-uv run examples/agrivla/convert_agrivla_to_lerobot.py \
+uv run examples/libero/convert_libero.py \
   --data_dir "$TFDS_DIR" \
   --repo_prefix "dpad25/agrivla_pi0" \
   --seed 42
