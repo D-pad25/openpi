@@ -4,7 +4,7 @@
 
  #PBS -l walltime=48:00:00
  #PBS -l select=1:ncpus=12:ngpus=1:gpu_id=A100:mem=200gb
- #PBS -o /home/n10813934/logs/agrivla_pi0_train_${PBS_ARRAY_INDEX}.log
+ #PBS -o /home/n10813934/logs/agrivla_pi0FAST_train_.log
 
  set -euo pipefail
  echo "== Job start: $(date) on $(hostname) =="
@@ -12,7 +12,7 @@
  REPO_DIR="/home/n10813934/gitRepos/openpi"
  LOG_DIR="/home/n10813934/logs"
  mkdir -p "$LOG_DIR"
- LOG_FILE="$LOG_DIR/agrivla_pi0_train_${PBS_ARRAY_INDEX}_$(date +%Y%m%d_%H%M).log"
+ LOG_FILE="$LOG_DIR/agrivla_pi0FAST_train_$(date +%Y%m%d_%H%M).log"
  exec > >(tee -a "$LOG_FILE") 2>&1
  echo "Logging to $LOG_FILE"
 
@@ -20,7 +20,7 @@
 
 # ─── Activate your virtual environment ────────────────────────────────────
  source .venv/bin/activate
-
+ ulimit -n 4096 || true
 # ─── Update enviroment path to cache direcotry  ───────────────────────────
  export OPENPI_DATA_HOME=$HOME/.cache/openpi
 
