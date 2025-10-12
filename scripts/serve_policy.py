@@ -60,7 +60,7 @@ class Args:
 # Default checkpoints that should be used for each environment.
 DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     EnvMode.PI0_BASE: Checkpoint(
-        config="pi0base_lora_xarm6_round2_fulldataset",
+        config="pi0_aloha",
         dir="s3://openpi-assets/checkpoints/pi0_base",
     ),
     EnvMode.ALOHA_SIM: Checkpoint(
