@@ -841,6 +841,7 @@ def _make_agrivla_fast_fullfinetune_config(repo_suffix: str) -> TrainConfig:
         ),
         # Same number of steps for fair comparison
         num_train_steps=80_000,
+        # batch_size = 16,
         # No freezing: all weights are trainable
         freeze_filter=nnx.Nothing(),
         wandb_enabled=True,

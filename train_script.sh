@@ -3,7 +3,7 @@
  #PBS -N EVAL
 
  #PBS -l walltime=48:00:00
- #PBS -l select=1:ncpus=12:ngpus=1:gpu_id=A100:mem=200gb
+ #PBS -l select=1:ncpus=24:ngpus=2:gpu_id=A100:mem=400gb
  #PBS -o /home/n10813934/logs/agrivla_pi0FAST_train_.log
 
  set -euo pipefail
@@ -33,9 +33,9 @@ source ~/.wandb_secrets
  EXP_NAME="${CONFIG}_$(date +%Y%m%d_%H%M)"
 
  # Run normalization stats computation
- echo "▶️  Computing normalization stats for config: $CONFIG"
- uv run scripts/compute_norm_stats.py --config-name "$CONFIG"
- echo "✅ Norm stats computed for $CONFIG"
+#  echo "▶️  Computing normalization stats for config: $CONFIG"
+#  uv run scripts/compute_norm_stats.py --config-name "$CONFIG"
+#  echo "✅ Norm stats computed for $CONFIG"
 
  # Train
  echo "▶️  Starting training for config: $CONFIG"
