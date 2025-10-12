@@ -569,6 +569,17 @@ _CONFIGS = [
         ),
     ),
 
+    TrainConfig(
+        name="pi0_base",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotxArm6DataConfig(
+            assets=AssetsConfig(
+                assets_dir="s3://openpi-assets/checkpoints/pi0_base/assets",
+                asset_id="ur5e",
+            )
+        ),
+    ),
+
     #
     # Inference Aloha configs.
     #
