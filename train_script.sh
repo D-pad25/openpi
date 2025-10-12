@@ -3,7 +3,7 @@
  #PBS -N EVAL
 
  #PBS -l walltime=48:00:00
- #PBS -l select=1:ncpus=12:ngpus=1:gpu_id=H100:mem=200gb
+ #PBS -l select=1:ncpus=12:ngpus=1:gpu_id=A100:mem=200gb
  #PBS -o /home/n10813934/logs/agrivla_pi0_train_${PBS_ARRAY_INDEX}.log
 
  set -euo pipefail
