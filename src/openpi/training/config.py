@@ -551,14 +551,8 @@ _CONFIGS = [
         name="pi0_base",
         model=pi0.Pi0Config(),
         data=LeRobotxArm6DataConfig(
-            # The repo_id is used to load the dataset.
-            repo_id="dpad25/agrivla_pick_tomatoes_v1",
-
-            # The base config is used to load the dataset
-            base_config=DataConfig(
-                local_files_only=True,  # Set to True for local-only datasets.
-                prompt_from_task=True,
-            ),
+            assets=AssetsConfig(asset_id="ur5e"),
+            default_prompt="Pick a ripe, red tomato and drop it in the blue bucket.",
         ),
     ),
 
