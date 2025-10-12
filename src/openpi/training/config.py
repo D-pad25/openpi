@@ -570,7 +570,7 @@ _CONFIGS = [
     ),
 
     TrainConfig(
-        name="pi0_base",
+        name="pi0_base_droid",
         model=pi0.Pi0Config(action_horizon=10),
         data=LeRobotxArm6DataConfig(
             assets=AssetsConfig(
