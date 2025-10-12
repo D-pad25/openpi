@@ -14,7 +14,7 @@ from openpi.training import config as _config
 class EnvMode(enum.Enum):
     """Supported environments."""
 
-    ALOHA = "aloha"
+    PI0_BASE = "pi0_base"
     ALOHA_SIM = "aloha_sim"
     DROID = "droid"
     LIBERO = "libero"
@@ -59,8 +59,8 @@ class Args:
 
 # Default checkpoints that should be used for each environment.
 DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
-    EnvMode.ALOHA: Checkpoint(
-        config="pi0_aloha",
+    EnvMode.PI0_BASE: Checkpoint(
+        config="pi0base_lora_xarm6_round2_fulldataset",
         dir="s3://openpi-assets/checkpoints/pi0_base",
     ),
     EnvMode.ALOHA_SIM: Checkpoint(
