@@ -526,7 +526,6 @@ _CONFIGS = [
         data=LeRobotxArm6DataConfig(
             # The repo_id is used to load the dataset.
             repo_id="dpad25/agrivla_pick_tomatoes_v1",
-            # repo_id=str(pathlib.Path("~/data/lerobot").expanduser()),
 
             # The base config is used to load the dataset
             base_config=DataConfig(
@@ -787,6 +786,48 @@ _CONFIGS = [
         wandb_enabled=False,
     ),
 ]
+# =============================================
+# === AGRIVLA PI0 SERIES (LoRA fine-tuning) ===
+# =============================================
+def _make_agrivla_config(repo_suffix: str) -> TrainConfig:
+    return TrainConfig(
+        name=f"pi0_lora_xarm6_{repo_suffix}",
+        model=pi0.Pi0Config(
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora"
+        ),
+        data=LeRobotxArm6DataConfig(
+            repo_id=f"dpad25/{repo_suffix}",
+            base_config=DataConfig(
+                local_files_only=True,
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "s3://openpi-assets/checkpoints/pi0_base/params"
+        ),
+        num_train_steps=30_000,
+        freeze_filter=pi0.Pi0Config(
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora"
+        ).get_freeze_filter(),
+        ema_decay=None,
+        wandb_enabled=True,
+    )
+
+# pi0 Config Variants
+_CONFIGS += [
+    _make_agrivla_config("agrivla_pi0_all"),
+    _make_agrivla_config("agrivla_pi0_tomatoes_only"),
+    _make_agrivla_config("agrivla_pi0_tomatoes_plus_10"),
+    _make_agrivla_config("agrivla_pi0_tomatoes_plus_20"),
+    _make_agrivla_config("agrivla_pi0_tomatoes_plus_50"),
+    _make_agrivla_config("agrivla_pi0_tomatoes_plus_100"),
+    _make_agrivla_config("agrivla_pi0_tomatoes_plus_200"),
+    _make_agrivla_config("agrivla_pi0_chillis_only"),
+]
+
+# =============================================
 
 if len({config.name for config in _CONFIGS}) != len(_CONFIGS):
     raise ValueError("Config names must be unique.")
