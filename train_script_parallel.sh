@@ -44,8 +44,8 @@ CONFIG=${CONFIGS[$((PBS_ARRAY_INDEX-1))]}
 
 EXP_NAME="${CONFIG}_$(date +%Y%m%d_%H%M)"
 
-# echo "▶️  Computing normalization stats for config: $CONFIG"
-# uv run scripts/compute_norm_stats.py --config-name "$CONFIG"
+echo "▶️  Computing normalization stats for config: $CONFIG"
+uv run scripts/compute_norm_stats.py --config-name "$CONFIG"
 
 echo "✅ Norm stats computed for $CONFIG"
 echo "▶️  Starting training for config: $CONFIG"

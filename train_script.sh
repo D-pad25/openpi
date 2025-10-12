@@ -2,13 +2,21 @@
 
  #PBS -N EVAL
 
- #PBS -l walltime=18:00:00
- #PBS -l select=1:ncpus=4:ngpus=1:gpu_id=H100:mem=80gb
+ #PBS -l walltime=48:00:00
+ #PBS -l select=1:ncpus=12:ngpus=1:gpu_id=H100:mem=200gb
+ #PBS -o /home/n10813934/logs/agrivla_pi0_train_${PBS_ARRAY_INDEX}.log
 
  set -euo pipefail
-
+ echo "== Job start: $(date) on $(hostname) =="
 # ─── Setup working directory ──────────────────────────────────────────────
- cd /home/n10813934/gitRepos/openpi  # Adjust path to your actual repo
+ REPO_DIR="/home/n10813934/gitRepos/openpi"
+ LOG_DIR="/home/n10813934/logs"
+ mkdir -p "$LOG_DIR"
+ LOG_FILE="$LOG_DIR/agrivla_pi0_train_${PBS_ARRAY_INDEX}_$(date +%Y%m%d_%H%M).log"
+ exec > >(tee -a "$LOG_FILE") 2>&1
+ echo "Logging to $LOG_FILE"
+
+ cd "$REPO_DIR"
 
 # ─── Activate your virtual environment ────────────────────────────────────
  source .venv/bin/activate
@@ -20,10 +28,18 @@
 source ~/.wandb_secrets
 
 # ─── Run your model using uv and config name ──────────────────────────────
-# Round 1 - 
-# XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_xarm6_low_mem_finetune --exp-name=pi0_xarm6_lora_pickTomatoes_noFrozenFrames --overwrite
-
 # Round 2 -
- XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0base_lora_xarm6_round2_fulldataset --exp-name=pi0base_lora_xarm6_round2_fulldataset --overwrite
+ CONFIG="pi0_fast_fullfinetune_xarm6_agrivla_pi0_all"
+ EXP_NAME="${CONFIG}_$(date +%Y%m%d_%H%M)"
+
+ # Run normalization stats computation
+ echo "▶️  Computing normalization stats for config: $CONFIG"
+ uv run scripts/compute_norm_stats.py --config-name "$CONFIG"
+ echo "✅ Norm stats computed for $CONFIG"
+
+ # Train
+ echo "▶️  Starting training for config: $CONFIG"
+ echo "Experiment name: $EXP_NAME"
+ XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py "$CONFIG" --exp-name="$EXP_NAME" --overwrite
 
  exit
