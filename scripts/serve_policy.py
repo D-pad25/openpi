@@ -14,6 +14,9 @@ from openpi.training import config as _config
 class EnvMode(enum.Enum):
     """Supported environments."""
     PI0_BASE = "pi0_base"
+    PI0_FAST_BASE = "pi0_fast_base"
+    PI0_BASE_DROID = "pi0_base_droid"
+    PI0_FAST_DROID = "pi0_fast_droid"
     ALOHA = "aloha"
     ALOHA_SIM = "aloha_sim"
     DROID = "droid"
@@ -62,6 +65,18 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     EnvMode.PI0_BASE: Checkpoint(
         config="pi0_base",
         dir="s3://openpi-assets/checkpoints/pi0_base",
+    ),
+    EnvMode.PI0_FAST_BASE: Checkpoint(
+        config="pi0_fast_base",
+        dir="s3://openpi-assets/checkpoints/pi0_fast_base",
+    ),
+    EnvMode.PI0_BASE_DROID: Checkpoint(
+        config="pi0_base",
+        dir="s3://openpi-assets/checkpoints/pi0_base",
+    ),
+    EnvMode.PI0_FAST_DROID: Checkpoint(
+        config="pi0_fast_base",
+        dir="s3://openpi-assets/checkpoints/pi0_fast_base",
     ),
     EnvMode.ALOHA: Checkpoint(
         config="pi0_aloha",
