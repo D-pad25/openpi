@@ -815,8 +815,40 @@ def _make_agrivla_config(repo_suffix: str) -> TrainConfig:
         wandb_enabled=True,
     )
 
+# =============================================
+# === AGRIVLA PI0-FAST FULL FINETUNE (no LoRA)
+# =============================================
+
+def _make_agrivla_fast_fullfinetune_config(repo_suffix: str) -> TrainConfig:
+    return TrainConfig(
+        name=f"pi0_fast_fullfinetune_xarm6_{repo_suffix}",
+        # Full fine-tuning of pi0-FAST (no LoRA adapters)
+        model=pi0_fast.Pi0FASTConfig(
+            action_dim=7,
+            action_horizon=10,
+            max_token_len=180,
+        ),
+        data=LeRobotxArm6DataConfig(
+            repo_id=f"dpad25/{repo_suffix}",
+            base_config=DataConfig(
+                local_files_only=True,
+                prompt_from_task=True,
+            ),
+        ),
+        # Initialize from the pi0-FAST base checkpoint
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "s3://openpi-assets/checkpoints/pi0_fast_base/params"
+        ),
+        # Same number of steps for fair comparison
+        num_train_steps=80_000,
+        # No freezing: all weights are trainable
+        freeze_filter=nnx.Nothing(),
+        wandb_enabled=True,
+    )
+
 # pi0 Config Variants
 _CONFIGS += [
+    _make_agrivla_fast_fullfinetune_config("agrivla_pi0_all"),
     _make_agrivla_config("agrivla_pi0_all"),
     _make_agrivla_config("agrivla_pi0_tomatoes_only"),
     _make_agrivla_config("agrivla_pi0_tomatoes_plus_10"),

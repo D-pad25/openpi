@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #PBS -N AGRIVLA_PI0_TRAIN
-#PBS -l walltime=30:00:00
-#PBS -l select=1:ncpus=12:ngpus=1:gpu_id=A100:mem=150gb
+#PBS -l walltime=48:00:00
+#PBS -l select=1:ncpus=12:ngpus=1:gpu_id=A100:mem=200gb
 #PBS -J 1-8
 #PBS -j oe
 #PBS -o /home/n10813934/logs/agrivla_pi0_train_${PBS_ARRAY_INDEX}.log
@@ -27,22 +27,25 @@ source ~/.wandb_secrets  # contains WANDB_API_KEY, etc.
 # export XLA_PYTHON_CLIENT_MEM_FRACTION=0.9
 
 # ─── Dataset / config mapping ─────────────────────────────────────────────
+# CONFIGS=(
+#   "pi0_lora_xarm6_agrivla_pi0_all"
+#   "pi0_lora_xarm6_agrivla_pi0_tomatoes_only"
+#   "pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_10"
+#   "pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_20"
+#   "pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_50"
+#   "pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_100"
+#   "pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_200"
+#   "pi0_lora_xarm6_agrivla_pi0_chillis_only"
+# )
 CONFIGS=(
-  "pi0_lora_xarm6_agrivla_pi0_all"
-  "pi0_lora_xarm6_agrivla_pi0_tomatoes_only"
-  "pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_10"
-  "pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_20"
-  "pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_50"
-  "pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_100"
-  "pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_200"
-  "pi0_lora_xarm6_agrivla_pi0_chillis_only"
+  "pi0_fast_fullfinetune_xarm6_agrivla_pi0_all"
 )
 CONFIG=${CONFIGS[$((PBS_ARRAY_INDEX-1))]}
 
 EXP_NAME="${CONFIG}_$(date +%Y%m%d_%H%M)"
 
-echo "▶️  Computing normalization stats for config: $CONFIG"
-uv run scripts/compute_norm_stats.py --config-name "$CONFIG"
+# echo "▶️  Computing normalization stats for config: $CONFIG"
+# uv run scripts/compute_norm_stats.py --config-name "$CONFIG"
 
 echo "✅ Norm stats computed for $CONFIG"
 echo "▶️  Starting training for config: $CONFIG"
