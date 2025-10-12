@@ -551,8 +551,10 @@ _CONFIGS = [
         name="pi0_base",
         model=pi0.Pi0Config(),
         data=LeRobotxArm6DataConfig(
-            assets=AssetsConfig(asset_id="ur5e"),
-            default_prompt="Pick a ripe, red tomato and drop it in the blue bucket.",
+            assets=AssetsConfig(
+                assets_dir="s3://openpi-assets/checkpoints/pi0_base/assets",
+                asset_id="ur5e",
+            )
         ),
     ),
 
