@@ -150,43 +150,51 @@ def _freedman_diaconis_bins(x: np.ndarray) -> int:
 # -------------------- Plotters --------------------
 
 def plot_aggregate_bars(aggs: List[Tuple[str, Dict]], out_noext: str):
+    """Minimal, colour-only aggregate bars (no hatches, no outlines, no annotations)."""
     labels = [lbl for lbl, _ in aggs]
-    # Build arrays: means and sems (R runs × M metrics)
-    means = np.array([[aggs[i][1][m]["mean"] for m in AGG_METRICS] for i in range(len(aggs))])
-    sems  = np.array([[aggs[i][1][m]["sem"]  for m in AGG_METRICS] for i in range(len(aggs))])
+
+    # Means only (we intentionally ignore SEM for a cleaner plot)
+    means = np.array([[aggs[i][1][m]["mean"] for m in AGG_METRICS]
+                      for i in range(len(aggs))])
 
     colors = [PALETTE[i % len(PALETTE)] for i in range(len(labels))]
-    hatches = [HATCHES[i % len(HATCHES)] for i in range(len(labels))]
 
-    fig, ax = plt.subplots(figsize=(10.5, 5.8))
+    fig, ax = plt.subplots(figsize=(10.0, 5.2))
     x = np.arange(len(AGG_METRICS))
-    width = min(0.75 / max(len(labels), 1), 0.22)
+    width = min(0.80 / max(len(labels), 1), 0.22)
 
     for i, lbl in enumerate(labels):
-        off = x + (i - (len(labels)-1)/2) * width
-        bars = ax.bar(off, means[i], width, yerr=sems[i], capsize=3,
-                      label=lbl, color=colors[i], edgecolor="black",
-                      linewidth=0.4, hatch=hatches[i])
-        # annotate values & % improvement vs baseline (first run)
-        base = means[0]
-        for j, b in enumerate(bars):
-            v = means[i, j]
-            ax.text(b.get_x() + b.get_width()/2, v,
-                    f"{v:.3f}",
-                    ha="center", va="bottom", fontsize=9, rotation=0)
-            if i != 0 and np.isfinite(base[j]) and base[j] > 1e-9:
-                impr = 100.0 * (base[j] - v) / base[j]
-                ax.text(b.get_x() + b.get_width()/2, v + max(sems[i, j], 1e-6) + 0.005,
-                        f"↓{impr:.1f}%", ha="center", va="bottom", fontsize=8.5, color="#444444")
+        off = x + (i - (len(labels) - 1) / 2.0) * width
+        ax.bar(
+            off,
+            means[i],
+            width,
+            label=lbl,
+            color=colors[i]
+            # edgecolor=None,   # no outlines
+            # linewidth=0       # ensure no stroke
+        )
 
     ax.set_xticks(x)
-    ax.set_xticklabels([PRETTY_METRIC[m] for m in AGG_METRICS], rotation=15)
+    ax.set_xticklabels([PRETTY_METRIC[m] for m in AGG_METRICS], rotation=8)
     ax.set_ylabel("Error (rad)")
-    ax.set_title("Aggregate error (mean ± SEM) — lower is better", pad=10)
+    ax.set_title("Aggregate error (mean) — lower is better", pad=8)
     ax.set_ylim(bottom=0)
-    ax.legend(ncol=1, frameon=True, loc="upper left", bbox_to_anchor=(1.02, 1.0))
-    fig.tight_layout(rect=[0, 0, 0.82, 1])
+
+    # Simple, compact legend above the axes; no frame for less clutter
+    ax.legend(
+        ncol=min(3, len(labels)),
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.18),
+        handlelength=1.4,
+        columnspacing=1.2
+    )
+
+    # Slightly tighter layout since legend is outside
+    fig.tight_layout(rect=[0, 0, 1, 0.92])
     _savefig(fig, out_noext)
+
 
 def plot_per_step_overlay(dfs: List[pd.DataFrame], labels: List[str], col: str, out_noext: str):
     dfs = _trim_to_common_length(dfs)
