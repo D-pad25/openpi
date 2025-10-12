@@ -560,7 +560,7 @@ _CONFIGS = [
 
     TrainConfig(
         name="pi0_fast_base",
-        model=pi0_fast.Pi0FASTConfig(action_dim=7, action_horizon=10),
+        model=pi0_fast.Pi0FASTConfig(),
         data=LeRobotxArm6DataConfig(
             assets=AssetsConfig(
                 assets_dir="s3://openpi-assets/checkpoints/pi0_fast_base/assets",
