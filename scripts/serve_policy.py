@@ -26,14 +26,14 @@ class EnvMode(enum.Enum):
     # ------------------------
     # AGRIVLA ROUND 3
     # ------------------------
-    AGRIVLA_ALL = "agrivla_pi0_all"
-    AGRIVLA_TOMATOES_ONLY = "agrivla_tomatoes_only"
-    AGRIVLA_TOMATOES_PLUS_10 = "agrivla_tomatoes_plus_10"
-    AGRIVLA_TOMATOES_PLUS_20 = "agrivla_tomatoes_plus_20"
-    AGRIVLA_TOMATOES_PLUS_50 = "agrivla_tomatoes_plus_50"
-    AGRIVLA_TOMATOES_PLUS_100 = "agrivla_tomatoes_plus_100"
-    AGRIVLA_TOMATOES_PLUS_200 = "agrivla_tomatoes_plus_200"
-    AGRIVLA_CHILLIS_ONLY = "agrivla_chillis_only"
+    AGRIVLA_ALL = "pi0_lora_xarm6_agrivla_pi0_all"
+    AGRIVLA_TOMATOES_ONLY = "pi0_lora_xarm6_agrivla_tomatoes_only"
+    AGRIVLA_TOMATOES_PLUS_10 = "pi0_lora_xarm6_agrivla_tomatoes_plus_10"
+    AGRIVLA_TOMATOES_PLUS_20 = "pi0_lora_xarm6_agrivla_tomatoes_plus_20"
+    AGRIVLA_TOMATOES_PLUS_50 = "pi0_lora_xarm6_agrivla_tomatoes_plus_50"
+    AGRIVLA_TOMATOES_PLUS_100 = "pi0_lora_xarm6_agrivla_tomatoes_plus_100"
+    AGRIVLA_TOMATOES_PLUS_200 = "pi0_lora_xarm6_agrivla_tomatoes_plus_200"
+    AGRIVLA_CHILLIS_ONLY = "pi0_lora_xarm6_agrivla_chillis_only"
 
 
 @dataclasses.dataclass
@@ -118,11 +118,11 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     # AGRIVLA ROUND 3
     # ------------------------
     EnvMode.AGRIVLA_ALL: Checkpoint(
-        config="agrivla_pi0_all",
+        config="pi0_lora_xarm6_agrivla_pi0_all",
         dir="checkpoints/pi0_lora_xarm6_agrivla_pi0_all/pi0_lora_xarm6_agrivla_pi0_all_20251012_1322/29999",
     ),
     EnvMode.AGRIVLA_TOMATOES_ONLY: Checkpoint(
-        config="agrivla_pi0_tomatoes_only",
+        config="pi0_lora_xarm6_agrivla_pi0_tomatoes_only",
         dir="checkpoints/pi0_lora_xarm6_agrivla_pi0_tomatoes_only/pi0_lora_xarm6_agrivla_pi0_tomatoes_only_20251012_1322/29999",
     ),
     # EnvMode.AGRIVLA_TOMATOES_PLUS_10: Checkpoint(
@@ -138,15 +138,15 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     #     dir="checkpoints/pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_50/pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_50_20251012_1322/29999",
     # ),
     EnvMode.AGRIVLA_TOMATOES_PLUS_100: Checkpoint(
-        config="agrivla_pi0_tomatoes_plus_100",
+        config="pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_100",
         dir="checkpoints/pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_100/pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_100_20251012_1322/29999",
     ),
     EnvMode.AGRIVLA_TOMATOES_PLUS_200: Checkpoint(
-        config="agrivla_pi0_tomatoes_plus_200",
+        config="pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_200",
         dir="checkpoints/pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_200/pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_200_20251012_1322/29999",
     ),
     EnvMode.AGRIVLA_CHILLIS_ONLY: Checkpoint(
-        config="agrivla_pi0_chillis_only",
+        config="pi0_lora_xarm6_agrivla_pi0_chillis_only",
         dir="checkpoints/pi0_lora_xarm6_agrivla_pi0_chillis_only/pi0_lora_xarm6_agrivla_pi0_chillis_only_20251012_1322/29999",
     ),
 }
