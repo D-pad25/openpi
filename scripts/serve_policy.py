@@ -26,7 +26,7 @@ class EnvMode(enum.Enum):
     # ------------------------
     # AGRIVLA ROUND 3
     # ------------------------
-    AGRIVLA_ALL = "agrivla_all"
+    AGRIVLA_ALL = "agrivla_pi0_all"
     AGRIVLA_TOMATOES_ONLY = "agrivla_tomatoes_only"
     AGRIVLA_TOMATOES_PLUS_10 = "agrivla_tomatoes_plus_10"
     AGRIVLA_TOMATOES_PLUS_20 = "agrivla_tomatoes_plus_20"
