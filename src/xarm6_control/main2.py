@@ -22,11 +22,31 @@ def ask_validation_questions(log_dir: str, total_time: float):
     print("\n🧠 Validation Questionnaire")
     print("Please answer the following questions to validate this trial.\n")
 
+    # Mapping for shorthand normalization
+    normalize_map = {
+        "y": "yes", "n": "no",
+        "l": "left", "r": "right",
+        "t": "tomato", "c": "chilli",
+        "b": "both",
+    }
+
+    def normalize_response(resp: str) -> str:
+        """Normalizes short or mixed-case answers."""
+        r = resp.strip().lower()
+        if r in normalize_map:
+            return normalize_map[r]
+        # handle combined shorthand like "t+c"
+        if "+" in r or "," in r:
+            parts = [normalize_map.get(p.strip(), p.strip()) for p in r.replace(",", "+").split("+")]
+            if "tomato" in parts and "chilli" in parts:
+                return "both"
+        return r
+
     questions = [
         ("initial_position", "Starting position (left/center/right): "),
         ("bucket_side", "Bucket location (left/right): "),
         ("fruit_variant", "Fruit type (tomato/chilli): "),
-        ("fruits_present", "Which fruits were present in the scene? (tomato/chilli/both/none): "),  # 👈 NEW
+        ("fruits_present", "Which fruits were present in the scene? (tomato/chilli/both/none): "),
         ("location", "Crop location (e.g., row2_col3): "),
         ("in_training_set", "Was this location in training data? (yes/no/unsure): "),
         ("reached_fruit", "Robot reached target fruit? (yes/no/partial): "),
@@ -41,14 +61,17 @@ def ask_validation_questions(log_dir: str, total_time: float):
         ("notes", "Additional notes/observations: "),
     ]
 
-    answers = {key: input(prompt).strip() for key, prompt in questions}
+    answers = {}
+    for key, prompt in questions:
+        raw = input(prompt).strip()
+        answers[key] = normalize_response(raw)
 
     # Add automatic metadata
     answers["timestamp"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     answers["run_folder"] = os.path.basename(log_dir)
     answers["total_time_sec"] = total_time
 
-    # Coerce numeric fields
+    # Numeric coercion
     try:
         answers["attempts"] = int(answers["attempts"])
     except (ValueError, KeyError):
@@ -63,7 +86,6 @@ def ask_validation_questions(log_dir: str, total_time: float):
     csv_path = os.path.join(os.path.dirname(log_dir), "validation_log.csv")
     write_header = not os.path.exists(csv_path)
 
-    # Consistent column order (includes fruits_present)
     fieldnames = [
         "timestamp", "run_folder", "total_time_sec",
         "initial_position", "bucket_side", "fruit_variant", "fruits_present", "location",
@@ -72,7 +94,7 @@ def ask_validation_questions(log_dir: str, total_time: float):
         "perceived_difficulty", "good_for_presentation", "notes"
     ]
 
-    # Ensure all fields exist
+    # Fill missing fields
     for field in fieldnames:
         if field not in answers:
             answers[field] = ""
@@ -87,9 +109,10 @@ def ask_validation_questions(log_dir: str, total_time: float):
             print(f"\n📄 Appending to existing validation log: {csv_path}")
         writer.writerow(answers)
 
-    # Summary print
+    # Summary
     print(f"\n⏱️  Total run time: {total_time:.2f} s")
     print(f"✅ Validation results appended successfully.\n")
+
 
 
 
