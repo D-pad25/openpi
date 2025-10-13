@@ -26,6 +26,7 @@ def ask_validation_questions(log_dir: str, total_time: float):
         ("initial_position", "Starting position (left/center/right): "),
         ("bucket_side", "Bucket location (left/right): "),
         ("fruit_variant", "Fruit type (tomato/chilli): "),
+        ("fruits_present", "Which fruits were present in the scene? (tomato/chilli/both/none): "),  # 👈 NEW
         ("location", "Crop location (e.g., row2_col3): "),
         ("in_training_set", "Was this location in training data? (yes/no/unsure): "),
         ("reached_fruit", "Robot reached target fruit? (yes/no/partial): "),
@@ -36,6 +37,7 @@ def ask_validation_questions(log_dir: str, total_time: float):
         ("collision", "Collision severity (none/minor/major): "),
         ("recovery_needed", "Manual intervention required? (yes/no): "),
         ("perceived_difficulty", "How difficult was this case (1–5): "),
+        ("good_for_presentation", "Was this run good for presentation/video? (yes/no): "),
         ("notes", "Additional notes/observations: "),
     ]
 
@@ -46,25 +48,49 @@ def ask_validation_questions(log_dir: str, total_time: float):
     answers["run_folder"] = os.path.basename(log_dir)
     answers["total_time_sec"] = total_time
 
+    # Coerce numeric fields
+    try:
+        answers["attempts"] = int(answers["attempts"])
+    except (ValueError, KeyError):
+        answers["attempts"] = None
+
+    try:
+        answers["perceived_difficulty"] = int(answers["perceived_difficulty"])
+    except (ValueError, KeyError):
+        answers["perceived_difficulty"] = None
+
     # CSV path
     csv_path = os.path.join(os.path.dirname(log_dir), "validation_log.csv")
     write_header = not os.path.exists(csv_path)
 
+    # Consistent column order (includes fruits_present)
     fieldnames = [
         "timestamp", "run_folder", "total_time_sec",
-        "initial_position", "bucket_side", "fruit_variant", "location",
+        "initial_position", "bucket_side", "fruit_variant", "fruits_present", "location",
         "in_training_set", "reached_fruit", "grasp_success", "correct_fruit",
         "bucket_drop", "attempts", "collision", "recovery_needed",
-        "perceived_difficulty", "notes"
+        "perceived_difficulty", "good_for_presentation", "notes"
     ]
-    
+
+    # Ensure all fields exist
+    for field in fieldnames:
+        if field not in answers:
+            answers[field] = ""
+
+    # Append to CSV
     with open(csv_path, "a", newline="") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         if write_header:
             writer.writeheader()
+            print(f"\n🆕 Created new validation log at: {csv_path}")
+        else:
+            print(f"\n📄 Appending to existing validation log: {csv_path}")
         writer.writerow(answers)
 
-    print(f"\n✅ Validation results appended to: {csv_path}")
+    # Summary print
+    print(f"\n⏱️  Total run time: {total_time:.2f} s")
+    print(f"✅ Validation results appended successfully.\n")
+
 
 
 def main(
