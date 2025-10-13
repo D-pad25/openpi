@@ -109,19 +109,34 @@ source /opt/ros/noetic/setup.bash
 export PYTHONPATH=$PYTHONPATH:/opt/ros/noetic/lib/python3/dist-packages
 ```
 
-#### 3.2 Run the gripper server
-
-> - **Note:** I need to test the `gripper_server_async`.  
-> - When testing this, make sure to also change which class is referenced in `xarm_env.py`.
-
+#### 3.2 Launch camera nodes
+> - **NOTE**: You need to be in the virtual enviroment to run this
 ```bash
-uv run src/xarm6_control/gripper_server
+uv run src/xarm6_control/zmq_core/launch_camera_nodes.py
+```
+> - **NOTE**: You need to be outside virtual enviroment to run this
+
+#### 3.3 Run the gripper server
+```bash
+python src/xarm6_control/gripper_server_async_v2.py
 ```
 
-#### 3.3 (a) Run the client script (refferencing local dir and rospy)
+#### 3.4 (a) Run the client script (refferencing local dir and rospy)
 
 > - **NOTE**: This used to be `PYTHONPATH=.:/opt/ros/noetic/lib/python3/dist-packages uv run src/xarm6_control/main2.py --remote_host localhost --remote_port 8000`, however, I changed it to the below. This needs to be tested. 
 
+#### 3.4 (b) Run the client script without ROS (recommended)
+##### To run with default propmt
 ```bash
 uv run src/xarm6_control/main2.py --remote_host localhost --remote_port 8000
+```
+
+##### To run with tomato propmt
+```bash
+uv run src/xarm6_control/main2.py --remote_host localhost --remote_port 8000 --prompt "Pick a ripe, red tomato and drop it in the blue bucket. [crop=tomato]"
+```
+
+##### To run with tomato propmt
+```bash
+uv run src/xarm6_control/main2.py --remote_host localhost --remote_port 8000 --prompt "Pick a red chilli and drop it in the blue bucket. [crop=chilli]"
 ```
