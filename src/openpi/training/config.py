@@ -565,9 +565,9 @@ _CONFIGS = [
         assets=AssetsConfig(
             assets_dir="/home/n10813934/gitRepos/openpi/checkpoints/pi0base_lora_xarm6_round2_fulldataset/pi0base_lora_xarm6_round2_fulldataset/29999/assets",
             asset_id="dpad25/agrivla_pick_tomatoes_v1",
+            ),
         ),
     ),
-)
 
     # TrainConfig(
     #     name="pi0_fast_base",
