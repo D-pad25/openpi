@@ -559,15 +559,26 @@ _CONFIGS = [
     ),
 
     TrainConfig(
-        name="pi0_fast_base",
-        model=pi0_fast.Pi0FASTConfig(),
-        data=LeRobotxArm6DataConfig(
-            assets=AssetsConfig(
-                assets_dir="s3://openpi-assets/checkpoints/pi0_fast_base/assets",
-                asset_id="ur5e",
-            )
+    name="pi0_fast_base",
+    model=pi0_fast.Pi0FASTConfig(),
+    data=LeRobotxArm6DataConfig(
+        assets=AssetsConfig(
+            assets_dir="/home/n10813934/gitRepos/openpi/checkpoints/pi0base_lora_xarm6_round2_fulldataset/pi0base_lora_xarm6_round2_fulldataset/29999/assets",
+            asset_id="dpad25/agrivla_pick_tomatoes_v1",
         ),
     ),
+)
+
+    # TrainConfig(
+    #     name="pi0_fast_base",
+    #     model=pi0_fast.Pi0FASTConfig(),
+    #     data=LeRobotxArm6DataConfig(
+    #         assets=AssetsConfig(
+    #             assets_dir="s3://openpi-assets/checkpoints/pi0_fast_base/assets",
+    #             asset_id="ur5e",
+    #         )
+    #     ),
+    # ),
 
     TrainConfig(
         name="pi0_base_droid",
