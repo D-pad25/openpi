@@ -178,10 +178,10 @@ def main(
             # Get new action_chunk if empty or 25 steps have passed
             if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= 25:
                 # pad images as per policy requirements
-                base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
-                wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
-                # base_rgb = resize_with_pad_custom(obs["base_rgb"], 224, 224)
-                # wrist_rgb = resize_with_pad_custom(obs["wrist_rgb"], 224, 224)
+                # base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
+                # wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
+                base_rgb = resize_with_pad_custom(obs["base_rgb"], 224, 224)
+                wrist_rgb = resize_with_pad_custom(obs["wrist_rgb"], 224, 224)
 
                 observation = {
                     "state": np.concatenate([obs["joint_position"], obs["gripper_position"]]),
