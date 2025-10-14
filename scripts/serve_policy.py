@@ -126,15 +126,15 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
         dir="checkpoints/pi0_lora_xarm6_agrivla_pi0_tomatoes_only/pi0_lora_xarm6_agrivla_pi0_tomatoes_only_20251012_1322/29999",
     ),
     EnvMode.AGRIVLA_TOMATOES_PLUS_10: Checkpoint(
-        config="agrivla_pi0_tomatoes_plus_10",
+        config="pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_10",
         dir="checkpoints/pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_10/pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_10_20251012_1322/29999",
     ),
     EnvMode.AGRIVLA_TOMATOES_PLUS_20: Checkpoint(
-        config="agrivla_pi0_tomatoes_plus_20",
+        config="pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_20",
         dir="checkpoints/pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_20/pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_20_20251012_1322/29999",
     ),
     EnvMode.AGRIVLA_TOMATOES_PLUS_50: Checkpoint(
-        config="agrivla_pi0_tomatoes_plus_50",
+        config="pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_50",
         dir="checkpoints/pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_50/pi0_lora_xarm6_agrivla_pi0_tomatoes_plus_50_20251012_1322/29999",
     ),
     EnvMode.AGRIVLA_TOMATOES_PLUS_100: Checkpoint(
