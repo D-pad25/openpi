@@ -332,8 +332,15 @@ def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
                width, label=lbl,
                color=colors[i % len(colors)], alpha=0.9)
         for j, v in enumerate(values[i]):
-            ax.text(x[j] + i * width - (len(labels) - 1) * width / 2,
-                    v, f"{v:.2f}", ha="center", va="bottom", fontsize=8)
+            ax.text(
+                x[j] + i * width - (len(labels) - 1) * width / 2,
+                v - 0.015,           # smaller vertical gap (previously v)
+                f"{v:.3f}",          # 3 decimal places
+                ha="center",
+                va="bottom",
+                fontsize=8,          # optional smaller text
+                color="black"
+            )
 
     ax.set_xticks(x)
     ax.set_xticklabels(["MAE (All 7)", "MAE (Joints 6)", "MAE (Gripper)"])
