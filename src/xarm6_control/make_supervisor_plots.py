@@ -300,7 +300,8 @@ def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
         ax.bar(x + i * width - (len(labels) - 1) * width / 2,
                values[i],
                width, label=lbl,
-               color=colors[i % len(colors)], alpha=0.9)
+               color=colors[i % len(colors)], alpha=0.9,
+               edgecolor="black", linewidth=0.8)
         for j, v in enumerate(values[i]):
             ax.text(x[j] + i * width - (len(labels) - 1) * width / 2,
                     v, f"{v:.3f}", ha="center", va="bottom", fontsize=8)
