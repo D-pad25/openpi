@@ -108,18 +108,20 @@ def _legend_below(ax, labels=None, colors=None):
        If labels/colors are provided (e.g., violin), build custom handles."""
     if labels is not None and colors is not None:
         handles = [Patch(facecolor=colors[i % len(colors)], edgecolor="black", label=lbl) for i, lbl in enumerate(labels)]
-        leg = ax.legend(handles=handles,
-                        loc="upper center",
-                        bbox_to_anchor=(0.5, -0.18),
-                        ncol=min(3, len(labels)),
-                        frameon=False)
+        leg = ax.legend(
+        handles, _labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.08),   # reduce from -0.18 to -0.08
+        ncol=min(3, len(_labels)),
+        frameon=False)
     else:
         handles, _labels = ax.get_legend_handles_labels()
-        leg = ax.legend(handles, _labels,
-                        loc="upper center",
-                        bbox_to_anchor=(0.5, -0.18),
-                        ncol=min(3, len(_labels)),
-                        frameon=False)
+        leg = ax.legend(
+        handles, _labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.08),   # reduce from -0.18 to -0.08
+        ncol=min(3, len(_labels)),
+        frameon=False)
     return leg
 
 
@@ -332,15 +334,8 @@ def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
                width, label=lbl,
                color=colors[i % len(colors)], alpha=0.9)
         for j, v in enumerate(values[i]):
-            ax.text(
-                x[j] + i * width - (len(labels) - 1) * width / 2,
-                v - 0.015,           # smaller vertical gap (previously v)
-                f"{v:.3f}",          # 3 decimal places
-                ha="center",
-                va="bottom",
-                fontsize=8,          # optional smaller text
-                color="black"
-            )
+            ax.text(x[j] + i * width - (len(labels) - 1) * width / 2,
+                    v, f"{v:.3f}", ha="center", va="bottom", fontsize=8)
 
     ax.set_xticks(x)
     ax.set_xticklabels(["MAE (All 7)", "MAE (Joints 6)", "MAE (Gripper)"])
