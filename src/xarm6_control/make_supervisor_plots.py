@@ -92,12 +92,12 @@ def _presentation_style():
         "savefig.dpi": 300,
         "axes.grid": False,
         "axes.edgecolor": "0.2",
-        "font.size": 12,
-        "axes.labelsize": 12,
-        "axes.titlesize": 12,
-        "xtick.labelsize": 12,
-        "ytick.labelsize": 12,
-        "legend.fontsize": 12,
+        "font.size": 10,
+        "axes.labelsize": 10,
+        "axes.titlesize": 10,
+        "xtick.labelsize": 10,
+        "ytick.labelsize": 10,
+        "legend.fontsize": 10,
         "figure.facecolor": "white",
         "axes.facecolor": "white",
     })
@@ -366,12 +366,12 @@ def plot_violin_pres(dfs: List[pd.DataFrame], labels: List[str], col: str, out_p
         vp.set_linewidth(1.2)
 
     ax.set_xticks(np.arange(1, len(labels) + 1))
-    # ax.set_xticklabels(labels, rotation=20)
+    ax.set_xticklabels(labels, rotation=20)
     ax.set_ylabel("MAE (rad)")
     ax.set_title("Distribution of Mean Absolute Error Across Models")
 
     _two_dp_ticks(ax, y=True)
-    _legend_below(ax, labels=labels, colors=colors)
+    # _legend_below(ax, labels=labels, colors=colors)
     fig.tight_layout(rect=[0, 0.12, 1, 1])
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
