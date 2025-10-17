@@ -233,36 +233,6 @@ def plot_cdf(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str
     plt.close(fig)
 
 
-def plot_violin(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str):
-    _presentation_style()
-    data = [df[col].dropna().values for df in dfs]
-    colors = plt.cm.tab10.colors[:len(labels)]
-
-    fig, ax = plt.subplots(figsize=(8,5))
-    parts = ax.violinplot(data, showmeans=True, showmedians=True, widths=0.7)
-
-    # color each violin body distinctly
-    for i, pc in enumerate(parts['bodies']):
-        pc.set_facecolor(colors[i % len(colors)])
-        pc.set_edgecolor("black")
-        pc.set_alpha(0.85)
-
-    for k in ('cbars', 'cmins', 'cmaxes'):
-        parts[k].set_edgecolor('black')
-        parts[k].set_linewidth(1.2)
-
-    ax.set_xticks(np.arange(1, len(labels)+1))
-    ax.set_xticklabels(labels, rotation=20)
-    ax.set_ylabel('Error (rad)')
-    ax.set_title(f'Violin plot of {col}')
-
-    _two_dp_ticks(ax, y=True)
-    _legend_below(ax, labels=labels, colors=colors)   # custom legend for violins
-    fig.tight_layout(rect=[0, 0.12, 1, 1])
-    fig.savefig(out_path, bbox_inches="tight")
-    plt.close(fig)
-
-
 def plot_improvement_by_step(baseline: pd.DataFrame, candidate: pd.DataFrame, col: str, out_path: str):
     _presentation_style()
     dfs = _trim_to_common_length([baseline, candidate])
@@ -360,7 +330,7 @@ def plot_violin_pres(dfs: List[pd.DataFrame], labels: List[str], col: str, out_p
         pc.set_edgecolor("black")
         pc.set_alpha(0.8)
 
-    for partname in ('cbars', 'cmins', 'cmaxes'):
+    for partname in ('cbars', 'cmins', 'cmaxes', 'cmeans', 'cmedians'):
         vp = parts[partname]
         vp.set_edgecolor("black")
         vp.set_linewidth(1.2)
@@ -417,9 +387,6 @@ def main():
     # 6) Histogram & 7) CDF
     plot_hist(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'hist_mae_all7.png'))
     plot_cdf(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'cdf_mae_all7.png'))
-
-    # 8) Violin
-    plot_violin(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'violin_mae_all7.png'))
 
     # 9) Improvement curve (only if >=2 runs) – uses first as baseline
     if len(dfs) >= 2:
