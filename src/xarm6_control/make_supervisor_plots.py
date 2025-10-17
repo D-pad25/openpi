@@ -94,150 +94,10 @@ def _nice_style():
         'legend.fancybox': True,
     })
 
-# ---------- Plotters ----------
-
-def plot_aggregate_bars(aggregates: List[Tuple[str, dict]], out_path: str):
-    labels = [lbl for lbl,_ in aggregates]
-    metrics = ['mae_all7','rmse_all7','mae_joints6','rmse_joints6','mae_grip','rmse_grip']
-    values = np.array([[agg[m] for m in metrics] for _,agg in aggregates])  # shape (R, M)
-
-    fig, ax = plt.subplots(figsize=(12,6))
-    x = np.arange(len(metrics))
-    width = 0.8 / len(labels)
-    for i, lbl in enumerate(labels):
-        ax.bar(x + i*width - (len(labels)-1)*width/2, values[i], width, label=lbl)
-    ax.set_xticks(x)
-    ax.set_xticklabels(metrics, rotation=20)
-    ax.set_ylabel('Error (rad)')
-    ax.set_title('Aggregate MAE / RMSE across runs')
-    ax.legend()
-    for i in range(len(labels)):
-        for j in range(len(metrics)):
-            v = values[i, j]
-            ax.text(x[j] + i*width - (len(labels)-1)*width/2, v, f"{v:.3f}", ha='center', va='bottom', fontsize=9)
-    fig.tight_layout()
-    fig.savefig(out_path)
-    plt.close(fig)
-
-
-def plot_per_step_overlay(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str):
-    dfs = _trim_to_common_length(dfs)
-    fig, ax = plt.subplots(figsize=(12,5))
-    for df, lbl in zip(dfs, labels):
-        ax.plot(df['step'], df[col], label=lbl, linewidth=1.6)
-    ax.set_xlabel('Step')
-    ax.set_ylabel('Error (rad)')
-    ax.set_title(f'Per-step {col} (trimmed to common length)')
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(out_path)
-    plt.close(fig)
-
-
-def plot_rolling(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str, window: int = 25):
-    dfs = _trim_to_common_length(dfs)
-    fig, ax = plt.subplots(figsize=(12,5))
-    for df, lbl in zip(dfs, labels):
-        roll = df[col].rolling(window=window, min_periods=1, center=False).mean()
-        ax.plot(df['step'], roll, label=f"{lbl} (win={window})", linewidth=2.0)
-    ax.set_xlabel('Step')
-    ax.set_ylabel('Error (rad)')
-    ax.set_title(f'Rolling mean of {col}')
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(out_path)
-    plt.close(fig)
-
-
-def plot_hist(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str, bins: int = 40):
-    fig, ax = plt.subplots(figsize=(10,5))
-    for df, lbl in zip(dfs, labels):
-        ax.hist(df[col].dropna().values, bins=bins, alpha=0.5, label=lbl, density=True)
-    ax.set_xlabel('Error (rad)')
-    ax.set_ylabel('Density')
-    ax.set_title(f'Histogram of {col}')
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(out_path)
-    plt.close(fig)
-
-
-def plot_cdf(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str):
-    fig, ax = plt.subplots(figsize=(10,5))
-    for df, lbl in zip(dfs, labels):
-        x = np.sort(df[col].dropna().values)
-        y = np.linspace(0, 1, len(x), endpoint=True)
-        ax.plot(x, y, label=lbl, linewidth=2.0)
-    ax.set_xlabel('Error (rad)')
-    ax.set_ylabel('Cumulative fraction')
-    ax.set_title(f'CDF of {col}')
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(out_path)
-    plt.close(fig)
-
-
-def plot_violin(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str):
-    data = [df[col].dropna().values for df in dfs]
-    fig, ax = plt.subplots(figsize=(8,5))
-    parts = ax.violinplot(data, showmeans=True, showmedians=True)
-    ax.set_xticks(np.arange(1, len(labels)+1))
-    ax.set_xticklabels(labels)
-    ax.set_ylabel('Error (rad)')
-    ax.set_title(f'Violin plot of {col}')
-    fig.tight_layout()
-    fig.savefig(out_path)
-    plt.close(fig)
-
-
-def plot_improvement_by_step(baseline: pd.DataFrame, candidate: pd.DataFrame, col: str, out_path: str):
-    dfs = _trim_to_common_length([baseline, candidate])
-    b, c = dfs
-    diff = b[col].values - c[col].values
-    fig, ax = plt.subplots(figsize=(12,5))
-    ax.plot(b['step'], diff, label=f"Improvement (baseline − candidate) {col}", linewidth=1.8)
-    ax.axhline(0.0, color='k', linewidth=1)
-    ax.set_xlabel('Step')
-    ax.set_ylabel('Δ Error (rad)')
-    ax.set_title(f'Per-step improvement over baseline ({col})')
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(out_path)
-    plt.close(fig)
-
-
-def render_summary_table(aggregates: List[Tuple[str, dict]], baseline_idx: int, out_path: str):
-    labels = [lbl for lbl,_ in aggregates]
-    metrics = ['mae_all7','rmse_all7','mae_joints6','rmse_joints6','mae_grip','rmse_grip']
-    rows = []
-    base = aggregates[baseline_idx][1]
-    for i,(lbl,agg) in enumerate(aggregates):
-        row = [lbl]
-        for m in metrics:
-            row.append(agg[m])
-        # % improvement vs baseline
-        if i != baseline_idx:
-            row += [100.0 * (base[m]-agg[m]) / base[m] for m in metrics]
-        else:
-            row += [0.0 for _ in metrics]
-        rows.append(row)
-    # build figure table
-    cols = ["Run"] + metrics + [m+"_impr%" for m in metrics]
-    fig, ax = plt.subplots(figsize=(min(16, 4 + 2*len(labels)), 1 + 0.5*len(labels)))
-    ax.axis('off')
-    table = ax.table(cellText=[[f"{v:.6f}" if isinstance(v,float) else v for v in r] for r in rows],
-                     colLabels=cols, loc='center')
-    table.auto_set_font_size(False)
-    table.set_fontsize(9)
-    table.scale(1, 1.3)
-    fig.tight_layout()
-    fig.savefig(out_path)
-    plt.close(fig)
-
-# ---------- Plotters (Presentation Style) ----------
+# ---------- Plotters (Unified Presentation Style) ----------
 
 def _presentation_style():
-    """Cleaner style for presentation slides."""
+    """Unified style for presentation & report plots."""
     plt.rcParams.update({
         "figure.dpi": 160,
         "savefig.dpi": 300,
@@ -254,6 +114,16 @@ def _presentation_style():
     })
 
 
+def _legend_below(ax):
+    """Move legend below the plot with centered alignment."""
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels,
+              loc="upper center",
+              bbox_to_anchor=(0.5, -0.15),
+              ncol=min(3, len(labels)),
+              frameon=False)
+
+
 def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
     """Simplified bar plot for presentation (MAE only)."""
     _presentation_style()
@@ -267,18 +137,26 @@ def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
     width = 0.8 / len(labels)
 
     for i, lbl in enumerate(labels):
-        ax.bar(x + i * width - (len(labels) - 1) * width / 2, values[i],
-               width, label=lbl, color=colors[i % len(colors)], alpha=0.9)
+        bars = ax.bar(x + i * width - (len(labels) - 1) * width / 2,
+                      values[i],
+                      width,
+                      label=lbl,
+                      color=colors[i % len(colors)],
+                      alpha=0.9)
         for j, v in enumerate(values[i]):
-            ax.text(x[j] + i * width - (len(labels) - 1) * width / 2, v + 0.005,
-                    f"{v:.3f}", ha="center", va="bottom", fontsize=12)
+            ax.text(x[j] + i * width - (len(labels) - 1) * width / 2,
+                    v + 0.005,
+                    f"{v:.2f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=12)
 
     ax.set_xticks(x)
     ax.set_xticklabels(["MAE (All 7)", "MAE (Joints 6)", "MAE (Gripper)"])
     ax.set_ylabel("Mean Absolute Error (rad)")
     ax.set_title("Model Comparison – Mean Absolute Error")
-    ax.legend(loc="upper right", frameon=False)
-    fig.tight_layout()
+    _legend_below(ax)
+    fig.tight_layout(rect=[0, 0.05, 1, 1])
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
 
@@ -297,7 +175,6 @@ def plot_violin_pres(dfs: List[pd.DataFrame], labels: List[str], col: str, out_p
         pc.set_edgecolor("black")
         pc.set_alpha(0.8)
 
-    # Customize other violin elements
     for partname in ('cbars', 'cmins', 'cmaxes'):
         vp = parts[partname]
         vp.set_edgecolor("black")
@@ -307,8 +184,69 @@ def plot_violin_pres(dfs: List[pd.DataFrame], labels: List[str], col: str, out_p
     ax.set_xticklabels(labels, rotation=20)
     ax.set_ylabel("MAE (rad)")
     ax.set_title("Distribution of Mean Absolute Error Across Models")
+    _legend_below(ax)
+    fig.tight_layout(rect=[0, 0.05, 1, 1])
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
 
-    fig.tight_layout()
+
+def plot_per_step_overlay(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str):
+    _presentation_style()
+    dfs = _trim_to_common_length(dfs)
+    fig, ax = plt.subplots(figsize=(12, 5))
+    for df, lbl in zip(dfs, labels):
+        ax.plot(df['step'], df[col], label=lbl, linewidth=2.0)
+    ax.set_xlabel('Step')
+    ax.set_ylabel('Error (rad)')
+    ax.set_title(f'Per-step {col}')
+    _legend_below(ax)
+    fig.tight_layout(rect=[0, 0.05, 1, 1])
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_rolling(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str, window: int = 25):
+    _presentation_style()
+    dfs = _trim_to_common_length(dfs)
+    fig, ax = plt.subplots(figsize=(12, 5))
+    for df, lbl in zip(dfs, labels):
+        roll = df[col].rolling(window=window, min_periods=1).mean()
+        ax.plot(df['step'], roll, label=lbl, linewidth=2.0)
+    ax.set_xlabel('Step')
+    ax.set_ylabel('Error (rad)')
+    ax.set_title(f'Rolling Mean ({col}, win={window})')
+    _legend_below(ax)
+    fig.tight_layout(rect=[0, 0.05, 1, 1])
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_hist(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str, bins: int = 40):
+    _presentation_style()
+    fig, ax = plt.subplots(figsize=(10, 5))
+    for df, lbl in zip(dfs, labels):
+        ax.hist(df[col].dropna().values, bins=bins, alpha=0.5, label=lbl, density=True)
+    ax.set_xlabel('Error (rad)')
+    ax.set_ylabel('Density')
+    ax.set_title(f'Histogram of {col}')
+    _legend_below(ax)
+    fig.tight_layout(rect=[0, 0.05, 1, 1])
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_cdf(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str):
+    _presentation_style()
+    fig, ax = plt.subplots(figsize=(10, 5))
+    for df, lbl in zip(dfs, labels):
+        x = np.sort(df[col].dropna().values)
+        y = np.linspace(0, 1, len(x))
+        ax.plot(x, y, label=lbl, linewidth=2.0)
+    ax.set_xlabel('Error (rad)')
+    ax.set_ylabel('Cumulative Fraction')
+    ax.set_title(f'Cumulative Distribution – {col}')
+    _legend_below(ax)
+    fig.tight_layout(rect=[0, 0.05, 1, 1])
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
 
