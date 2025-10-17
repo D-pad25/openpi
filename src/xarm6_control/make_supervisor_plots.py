@@ -155,7 +155,7 @@ def plot_aggregate_bars(aggregates: List[Tuple[str, dict]], out_path: str):
         for j in range(len(metrics)):
             v = values[i, j]
             ax.text(x[j] + i*width - (len(labels)-1)*width/2, v, f"{v:.2f}",
-                    ha='center', va='bottom', fontsize=12)
+                    ha='center', va='bottom', fontsize=8)
 
     _two_dp_ticks(ax, y=True)
     _legend_below(ax)
@@ -333,7 +333,7 @@ def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
                color=colors[i % len(colors)], alpha=0.9)
         for j, v in enumerate(values[i]):
             ax.text(x[j] + i * width - (len(labels) - 1) * width / 2,
-                    v, f"{v:.2f}", ha="center", va="bottom", fontsize=12)
+                    v, f"{v:.2f}", ha="center", va="bottom", fontsize=8)
 
     ax.set_xticks(x)
     ax.set_xticklabels(["MAE (All 7)", "MAE (Joints 6)", "MAE (Gripper)"])
