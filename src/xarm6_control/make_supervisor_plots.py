@@ -108,20 +108,18 @@ def _legend_below(ax, labels=None, colors=None):
        If labels/colors are provided (e.g., violin), build custom handles."""
     if labels is not None and colors is not None:
         handles = [Patch(facecolor=colors[i % len(colors)], edgecolor="black", label=lbl) for i, lbl in enumerate(labels)]
-        leg = ax.legend(
-        handles, _labels,
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.08),   # reduce from -0.18 to -0.08
-        ncol=min(3, len(_labels)),
-        frameon=False)
+        leg = ax.legend(handles=handles,
+                        loc="upper center",
+                        bbox_to_anchor=(0.5, -0.08),
+                        ncol=min(3, len(labels)),
+                        frameon=False)
     else:
         handles, _labels = ax.get_legend_handles_labels()
-        leg = ax.legend(
-        handles, _labels,
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.08),   # reduce from -0.18 to -0.08
-        ncol=min(3, len(_labels)),
-        frameon=False)
+        leg = ax.legend(handles, _labels,
+                        loc="upper center",
+                        bbox_to_anchor=(0.5, -0.08),
+                        ncol=min(3, len(_labels)),
+                        frameon=False)
     return leg
 
 
