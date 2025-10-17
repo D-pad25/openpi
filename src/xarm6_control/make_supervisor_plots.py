@@ -353,6 +353,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out-dir', type=str, required=True)
     parser.add_argument('items', nargs='+', help='Pairs: CSV LABEL [CSV LABEL ...]')
+    parser.add_argument('--pres', action='store_true', help='Generate presentation-only plots (MAE, black edges)')
     args = parser.parse_args()
 
     if len(args.items) % 2 != 0:
@@ -375,41 +376,45 @@ def main():
         json.dump({lbl: agg for lbl,agg in aggs}, f, indent=2)
 
     # 1) Aggregate bars (full: MAE+RMSE)
-    plot_aggregate_bars(aggs, os.path.join(args.out_dir, 'aggregate_bars.png'))
+    if args.pres:
+        plot_aggregate_bars_pres(aggs, os.path.join(args.out_dir, 'aggregate_bars_presentation.png'))
+        plot_violin_pres(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'violin_mae_all7_presentation.png'))
+    else:
+        plot_aggregate_bars(aggs, os.path.join(args.out_dir, 'aggregate_bars.png'))
 
-    # 2-4) Per-step overlays
-    plot_per_step_overlay(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'per_step_mae_all7.png'))
-    plot_per_step_overlay(dfs, labels, 'mae_joints6', os.path.join(args.out_dir, 'per_step_mae_joints6.png'))
-    plot_per_step_overlay(dfs, labels, 'mae_grip', os.path.join(args.out_dir, 'per_step_mae_grip.png'))
+        # 2-4) Per-step overlays
+        plot_per_step_overlay(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'per_step_mae_all7.png'))
+        plot_per_step_overlay(dfs, labels, 'mae_joints6', os.path.join(args.out_dir, 'per_step_mae_joints6.png'))
+        plot_per_step_overlay(dfs, labels, 'mae_grip', os.path.join(args.out_dir, 'per_step_mae_grip.png'))
 
-    # 5) Rolling average (25-step)
-    plot_rolling(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'rolling_mae_all7.png'), window=25)
+        # 5) Rolling average (25-step)
+        plot_rolling(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'rolling_mae_all7.png'), window=25)
 
-    # 6) Histogram & 7) CDF
-    plot_hist(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'hist_mae_all7.png'))
-    plot_cdf(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'cdf_mae_all7.png'))
+        # 6) Histogram & 7) CDF
+        plot_hist(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'hist_mae_all7.png'))
+        plot_cdf(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'cdf_mae_all7.png'))
 
-    # 9) Improvement curve (only if >=2 runs) – uses first as baseline
-    if len(dfs) >= 2:
-        for i in range(1, len(dfs)):
-            outp = os.path.join(args.out_dir, f'improvement_vs_{labels[i]}.png')
-            plot_improvement_by_step(dfs[0], dfs[i], 'mae_all7', outp)
+        # 9) Improvement curve (only if >=2 runs) – uses first as baseline
+        if len(dfs) >= 2:
+            for i in range(1, len(dfs)):
+                outp = os.path.join(args.out_dir, f'improvement_vs_{labels[i]}.png')
+                plot_improvement_by_step(dfs[0], dfs[i], 'mae_all7', outp)
 
-    # 10) Summary table (first run as baseline)
-    render_summary_table(aggs, baseline_idx=0, out_path=os.path.join(args.out_dir, 'summary_table.png'))
+        # 10) Summary table (first run as baseline)
+        render_summary_table(aggs, baseline_idx=0, out_path=os.path.join(args.out_dir, 'summary_table.png'))
 
-    # Presentation variants
-    plot_aggregate_bars_pres(aggs, os.path.join(args.out_dir, 'aggregate_bars_presentation.png'))
-    plot_violin_pres(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'violin_mae_all7_presentation.png'))
+        # Presentation variants
+        plot_aggregate_bars_pres(aggs, os.path.join(args.out_dir, 'aggregate_bars_presentation.png'))
+        plot_violin_pres(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'violin_mae_all7_presentation.png'))
 
-    # Optional: vs qdelta plots if present
-    if 'mae_vs_qdelta_all7' in dfs[0].columns:
-        plot_per_step_overlay(dfs, labels, 'mae_vs_qdelta_all7',
-                              os.path.join(args.out_dir, 'per_step_mae_vs_qdelta_all7.png'))
-        plot_hist(dfs, labels, 'mae_vs_qdelta_all7',
-                  os.path.join(args.out_dir, 'hist_mae_vs_qdelta_all7.png'))
-        plot_cdf(dfs, labels, 'mae_vs_qdelta_all7',
-                 os.path.join(args.out_dir, 'cdf_mae_vs_qdelta_all7.png'))
+        # Optional: vs qdelta plots if present
+        if 'mae_vs_qdelta_all7' in dfs[0].columns:
+            plot_per_step_overlay(dfs, labels, 'mae_vs_qdelta_all7',
+                                os.path.join(args.out_dir, 'per_step_mae_vs_qdelta_all7.png'))
+            plot_hist(dfs, labels, 'mae_vs_qdelta_all7',
+                    os.path.join(args.out_dir, 'hist_mae_vs_qdelta_all7.png'))
+            plot_cdf(dfs, labels, 'mae_vs_qdelta_all7',
+                    os.path.join(args.out_dir, 'cdf_mae_vs_qdelta_all7.png'))
 
     print(f"\n[OK] Saved all plots to {args.out_dir}\n")
 
