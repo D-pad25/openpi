@@ -234,6 +234,84 @@ def render_summary_table(aggregates: List[Tuple[str, dict]], baseline_idx: int, 
     fig.savefig(out_path)
     plt.close(fig)
 
+# ---------- Plotters (Presentation Style) ----------
+
+def _presentation_style():
+    """Cleaner style for presentation slides."""
+    plt.rcParams.update({
+        "figure.dpi": 160,
+        "savefig.dpi": 300,
+        "axes.grid": False,
+        "axes.edgecolor": "0.2",
+        "font.size": 16,
+        "axes.labelsize": 16,
+        "axes.titlesize": 18,
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
+        "legend.fontsize": 14,
+        "figure.facecolor": "white",
+        "axes.facecolor": "white",
+    })
+
+
+def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
+    """Simplified bar plot for presentation (MAE only)."""
+    _presentation_style()
+    labels = [lbl for lbl, _ in aggregates]
+    metrics = ['mae_all7', 'mae_joints6', 'mae_grip']
+    values = np.array([[agg[m] for m in metrics] for _, agg in aggregates])
+
+    colors = plt.cm.tab10.colors[:len(labels)]
+    fig, ax = plt.subplots(figsize=(10, 6))
+    x = np.arange(len(metrics))
+    width = 0.8 / len(labels)
+
+    for i, lbl in enumerate(labels):
+        ax.bar(x + i * width - (len(labels) - 1) * width / 2, values[i],
+               width, label=lbl, color=colors[i % len(colors)], alpha=0.9)
+        for j, v in enumerate(values[i]):
+            ax.text(x[j] + i * width - (len(labels) - 1) * width / 2, v + 0.005,
+                    f"{v:.3f}", ha="center", va="bottom", fontsize=12)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(["MAE (All 7)", "MAE (Joints 6)", "MAE (Gripper)"])
+    ax.set_ylabel("Mean Absolute Error (rad)")
+    ax.set_title("Model Comparison – Mean Absolute Error")
+    ax.legend(loc="upper right", frameon=False)
+    fig.tight_layout()
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_violin_pres(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str):
+    """High-contrast violin plot for presentation (e.g., mae_all7)."""
+    _presentation_style()
+    data = [df[col].dropna().values for df in dfs]
+    colors = plt.cm.tab10.colors[:len(labels)]
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    parts = ax.violinplot(data, showmeans=True, showmedians=True, widths=0.7)
+
+    for i, pc in enumerate(parts['bodies']):
+        pc.set_facecolor(colors[i % len(colors)])
+        pc.set_edgecolor("black")
+        pc.set_alpha(0.8)
+
+    # Customize other violin elements
+    for partname in ('cbars', 'cmins', 'cmaxes'):
+        vp = parts[partname]
+        vp.set_edgecolor("black")
+        vp.set_linewidth(1.2)
+
+    ax.set_xticks(np.arange(1, len(labels) + 1))
+    ax.set_xticklabels(labels, rotation=20)
+    ax.set_ylabel("MAE (rad)")
+    ax.set_title("Distribution of Mean Absolute Error Across Models")
+
+    fig.tight_layout()
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
 # ---------- Main ----------
 
 def main():
@@ -289,7 +367,9 @@ def main():
 
     # 10) Summary table (first run as baseline)
     render_summary_table(aggs, baseline_idx=0, out_path=os.path.join(args.out_dir, 'summary_table.png'))
-
+    # Presentation-style plots
+    plot_aggregate_bars_pres(aggs, os.path.join(args.out_dir, 'aggregate_bars_presentation.png'))
+    plot_violin_pres(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'violin_mae_all7_presentation.png'))
     # Optional: vs qdelta plots if present
     if 'mae_vs_qdelta_all7' in dfs[0].columns:
         # per‑step overlay
