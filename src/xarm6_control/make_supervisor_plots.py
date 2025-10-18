@@ -288,8 +288,8 @@ def render_summary_table(aggregates: List[Tuple[str, dict]], baseline_idx: int, 
 def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
     _presentation_style()
     labels = [lbl for lbl, _ in aggregates]
-    # metrics = ['mae_all7', 'mae_joints6', 'mae_grip']
-    metrics = ['mae_all7']
+    metrics = ['mae_all7', 'mae_joints6', 'mae_grip']
+    # metrics = ['mae_all7']
     values = np.array([[agg[m] for m in metrics] for _, agg in aggregates])
 
     colors = plt.cm.tab10.colors[:len(labels)]
@@ -307,11 +307,11 @@ def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
         #     ax.text(x[j] + i * width - (len(labels) - 1) * width / 2,
         #             v, f"{v:.3f}", ha="center", va="bottom", fontsize=8)
 
-    # ax.set_xticks(x)
-    # ax.set_xticklabels(["MAE (All 7)", "MAE (Joints 6)", "MAE (Gripper)"])
+    ax.set_xticks(x)
+    ax.set_xticklabels(["MAE (All 7)", "MAE (Joints 6)", "MAE (Gripper)"])
     # ax.set_xticklabels(["MAE (All 7)"])
     ax.set_ylabel("Mean Absolute Error (rad)")
-    ax.set_title("Mean Absolute Error")
+    ax.set_title("Model Comparison – Mean Absolute Error")
 
     _two_dp_ticks(ax, y=True)
     _legend_below(ax)
@@ -338,16 +338,101 @@ def plot_violin_pres(dfs: List[pd.DataFrame], labels: List[str], col: str, out_p
         vp.set_edgecolor("black")
         vp.set_linewidth(1.2)
 
-    # ax.set_xticks(np.arange(1, len(labels) + 1))
-    # ax.set_xticklabels(labels, rotation=20)
-    ax.set_ylabel("Mean Absolute Error (rad)")
-    ax.set_title("Distribution of Mean Absolute Error")
+    ax.set_xticks(np.arange(1, len(labels) + 1))
+    ax.set_xticklabels(labels, rotation=20)
+    ax.set_ylabel("Mean Absoloute Error (rad)")
+    ax.set_title("Distribution of Mean Absolute Error Across Models")
 
     _two_dp_ticks(ax, y=True)
     # _legend_below(ax, labels=labels, colors=colors)
     fig.tight_layout(rect=[0, 0.12, 1, 1])
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
+
+def plot_bar_and_violin_pres(aggregates: List[Tuple[str, dict]],
+                             dfs: List[pd.DataFrame],
+                             labels: List[str],
+                             out_path: str):
+    """Create side-by-side subplot: Bar (aggregates) + Violin (distribution) with shared legend."""
+    _presentation_style()
+
+    # -------------------------
+    # Data prep
+    # -------------------------
+    metrics = ['mae_all7']
+    values = np.array([[agg[m] for m in metrics] for _, agg in aggregates])
+    colors = plt.cm.tab10.colors[:len(labels)]
+    data = [df['mae_all7'].dropna().values for df in dfs]
+
+    # -------------------------
+    # Create subplots
+    # -------------------------
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6), sharey=False)
+    fig.subplots_adjust(wspace=0.25)
+
+    # -------------------------
+    # Left subplot: Bar chart
+    # -------------------------
+    x = np.arange(len(metrics))
+    width = 0.8 / len(labels)
+
+    for i, lbl in enumerate(labels):
+        ax1.bar(x + i * width - (len(labels) - 1) * width / 2,
+                values[i],
+                width,
+                color=colors[i % len(colors)],
+                alpha=0.9,
+                edgecolor="black",
+                linewidth=0.8,
+                label=lbl)
+
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(["MAE (All 7)"], fontsize=11)
+    ax1.set_ylabel("Mean Absolute Error (rad)", fontsize=12)
+    ax1.set_title("Aggregate Mean Absolute Error", fontsize=14, fontweight="bold")
+
+    _two_dp_ticks(ax1, y=True)
+
+    # -------------------------
+    # Right subplot: Violin plot
+    # -------------------------
+    parts = ax2.violinplot(data, showmeans=True, showmedians=True, widths=0.7)
+
+    for i, pc in enumerate(parts['bodies']):
+        pc.set_facecolor(colors[i % len(colors)])
+        pc.set_edgecolor("black")
+        pc.set_alpha(0.8)
+
+    for partname in ('cbars', 'cmins', 'cmaxes', 'cmeans', 'cmedians'):
+        vp = parts[partname]
+        vp.set_edgecolor("black")
+        vp.set_linewidth(1.2)
+
+    ax2.set_xticks(np.arange(1, len(labels) + 1))
+    ax2.set_xticklabels(labels, rotation=20, fontsize=11)
+    ax2.set_ylabel("Mean Absolute Error (rad)", fontsize=12)
+    ax2.set_title("Distribution of Mean Absolute Error", fontsize=14, fontweight="bold")
+
+    _two_dp_ticks(ax2, y=True)
+
+    # -------------------------
+    # Shared legend (bottom center)
+    # -------------------------
+    handles = [Patch(facecolor=colors[i % len(colors)], edgecolor="black", label=lbl) for i, lbl in enumerate(labels)]
+    fig.legend(handles=handles,
+               loc="upper center",
+               bbox_to_anchor=(0.5, 0.02),
+               ncol=min(4, len(labels)),
+               frameon=False,
+               fontsize=11)
+
+    # -------------------------
+    # Save
+    # -------------------------
+    fig.tight_layout(rect=[0, 0.06, 1, 1])
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
 
 # ---------- Main ----------
 
@@ -381,6 +466,12 @@ def main():
     if args.pres:
         plot_aggregate_bars_pres(aggs, os.path.join(args.out_dir, 'aggregate_bars_presentation.png'))
         plot_violin_pres(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'violin_mae_all7_presentation.png'))
+        plot_bar_and_violin_pres(
+            aggregates=aggs,
+            dfs=dfs,
+            labels=labels,
+            out_path=os.path.join(args.out_dir, 'mae_bar_violin_combined.png')
+        )
     else:
         plot_aggregate_bars(aggs, os.path.join(args.out_dir, 'aggregate_bars.png'))
 
