@@ -340,8 +340,9 @@ def plot_violin_pres(dfs: List[pd.DataFrame], labels: List[str], col: str, out_p
 
     ax.set_xticks(np.arange(1, len(labels) + 1))
     ax.set_xticklabels(labels, rotation=20)
-    ax.set_ylabel("Mean Absoloute Error (rad)")
-    ax.set_title("Distribution of Mean Absolute Error Across Models")
+    ax.set_xticklabels(["pi0 base", "pi0 DROID", "pi0 FAST base", "pi0 FAST DROID", "Diffusion", "AgriVLA"], rotation=20)
+    ax.set_ylabel("Mean Absolute Error (rad)")
+    ax.set_title("Distribution of Mean Absolute Error Across Models", fontweight="bold")
 
     _two_dp_ticks(ax, y=True)
     # _legend_below(ax, labels=labels, colors=colors)
