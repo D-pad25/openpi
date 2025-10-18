@@ -305,13 +305,12 @@ def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
         for j, v in enumerate(values[i]):
             ax.text(
                 x[j] + i * width - (len(labels) - 1) * width / 2,
-                v,
+                v + 0.015,
                 f"{v:.3f}",
                 ha="center", va="bottom",
                 fontsize=12,            # ← Larger font size
                 rotation=45,            # ← Angled labels
                 rotation_mode="anchor", # Keeps alignment neat
-                fontweight="semibold",  # Optional for better visibility
             )
 
     ax.set_xticks(x)
