@@ -464,7 +464,7 @@ def main():
     if args.pres:
         plot_aggregate_bars_pres(aggs, os.path.join(args.out_dir, 'aggregate_bars_presentation.png'))
         plot_violin_pres(dfs, labels, 'mae_all7', os.path.join(args.out_dir, 'violin_mae_all7_presentation.png'))
-        plot_bar_and_violin_pres(
+        plot_bar_violin_combined_pres(
             aggregates=aggs,
             dfs=dfs,
             labels=labels,
