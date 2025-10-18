@@ -92,12 +92,12 @@ def _presentation_style():
         "savefig.dpi": 300,
         "axes.grid": False,
         "axes.edgecolor": "0.2",
-        "font.size": 10,
-        "axes.labelsize": 10,
-        "axes.titlesize": 10,
-        "xtick.labelsize": 10,
-        "ytick.labelsize": 10,
-        "legend.fontsize": 10,
+        "font.size": 14,
+        "axes.labelsize": 14,
+        "axes.titlesize": 14,
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
+        "legend.fontsize": 14,
         "figure.facecolor": "white",
         "axes.facecolor": "white",
     })
@@ -289,6 +289,7 @@ def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
     _presentation_style()
     labels = [lbl for lbl, _ in aggregates]
     metrics = ['mae_all7', 'mae_joints6', 'mae_grip']
+    # metrics = ['mae_all7']
     values = np.array([[agg[m] for m in metrics] for _, agg in aggregates])
 
     colors = plt.cm.tab10.colors[:len(labels)]
@@ -302,28 +303,21 @@ def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
                width, label=lbl,
                color=colors[i % len(colors)], alpha=0.9,
                edgecolor="black", linewidth=0.8)
-        for j, v in enumerate(values[i]):
-            ax.text(
-                x[j] + i * width - (len(labels) - 1) * width / 2,
-                v + 0.015,
-                f"{v:.3f}",
-                ha="center", va="bottom",
-                fontsize=12,            # ← Larger font size
-                rotation=45,            # ← Angled labels
-                rotation_mode="anchor", # Keeps alignment neat
-            )
+        # for j, v in enumerate(values[i]):
+        #     ax.text(x[j] + i * width - (len(labels) - 1) * width / 2,
+        #             v, f"{v:.3f}", ha="center", va="bottom", fontsize=8)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(["MAE (All 7)", "MAE (Joints 6)", "MAE (Gripper)"], fontsize=12)
-    ax.set_ylabel("Mean Absolute Error (rad)", fontsize=12)
-    ax.set_title("Model Comparison – Mean Absolute Error", fontsize=14, fontweight="bold")
+    ax.set_xticklabels(["MAE (All 7)", "MAE (Joints 6)", "MAE (Gripper)"])
+    # ax.set_xticklabels(["MAE (All 7)"])
+    ax.set_ylabel("Mean Absolute Error (rad)")
+    ax.set_title("Model Comparison – Mean Absolute Error")
 
     _two_dp_ticks(ax, y=True)
     _legend_below(ax)
     fig.tight_layout(rect=[0, 0.08, 1, 1])
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
-
 
 
 def plot_violin_pres(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str):
