@@ -353,82 +353,98 @@ def plot_bar_violin_combined_pres(aggregates: List[Tuple[str, dict]],
                                   dfs: List[pd.DataFrame],
                                   labels: List[str],
                                   out_path: str):
-    """Create side-by-side bar + violin plot with shared legend (presentation style)."""
+    """Create side-by-side bar + violin plot with shared legend, boxed layout, and no x-axis ticks."""
     _presentation_style()
 
-    # ----- Data prep -----
+    # -------------------- Data prep --------------------
     metrics = ['mae_all7']
     values = np.array([[agg[m] for m in metrics] for _, agg in aggregates])
     colors = plt.cm.tab10.colors[:len(labels)]
     data = [df['mae_all7'].dropna().values for df in dfs]
 
-    # ----- Layout -----
+    # -------------------- Layout --------------------
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4), gridspec_kw={'width_ratios': [1, 2]})
     fig.subplots_adjust(wspace=0.25, bottom=0.25)
 
     # ========================
-    #  Left: Bar Chart
+    # Left: Bar Chart
     # ========================
     x = np.arange(len(metrics))
     width = 0.8 / len(labels)
 
     for i, lbl in enumerate(labels):
-        ax1.bar(x + i * width - (len(labels) - 1) * width / 2,
-                values[i],
-                width,
-                color=colors[i % len(colors)],
-                alpha=0.9,
-                edgecolor="black",
-                linewidth=0.7)
+        ax1.bar(
+            x + i * width - (len(labels) - 1) * width / 2,
+            values[i],
+            width,
+            color=colors[i % len(colors)],
+            alpha=0.9,
+            edgecolor="black",
+            linewidth=0.8
+        )
 
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(["MAE (All 7)"], fontsize=10)
     ax1.set_ylabel("Mean Absolute Error (rad)", fontsize=11)
     ax1.set_title("Model Comparison", fontsize=12, fontweight="bold")
     _two_dp_ticks(ax1, y=True)
-    for spine in ["top", "right"]:
-        ax1.spines[spine].set_visible(False)
+
+    # Remove x-axis elements
+    ax1.set_xticks([])
+    ax1.set_xticklabels([])
+    ax1.set_xlabel("")
+
+    # Keep all borders for the box look
+    for spine in ["top", "right", "bottom", "left"]:
+        ax1.spines[spine].set_visible(True)
+        ax1.spines[spine].set_linewidth(1.0)
+        ax1.spines[spine].set_color("black")
 
     # ========================
-    #  Right: Violin Plot
+    # Right: Violin Plot
     # ========================
     parts = ax2.violinplot(data, showmeans=True, showmedians=True, widths=0.7)
-
     for i, pc in enumerate(parts['bodies']):
         pc.set_facecolor(colors[i % len(colors)])
         pc.set_edgecolor("black")
         pc.set_alpha(0.9)
-
     for partname in ('cbars', 'cmins', 'cmaxes', 'cmeans', 'cmedians'):
         vp = parts[partname]
         vp.set_edgecolor("black")
         vp.set_linewidth(1.1)
 
-    ax2.set_xticks(np.arange(1, len(labels) + 1))
-    ax2.set_xticklabels(labels, rotation=15, fontsize=10)
     ax2.set_ylabel("Mean Absolute Error (rad)", fontsize=11)
     ax2.set_title("Distribution of Mean Absolute Error Across Models", fontsize=12, fontweight="bold")
     _two_dp_ticks(ax2, y=True)
-    for spine in ["top", "right"]:
-        ax2.spines[spine].set_visible(False)
+
+    # Remove x-axis ticks and labels
+    ax2.set_xticks([])
+    ax2.set_xticklabels([])
+    ax2.set_xlabel("")
+
+    # Boxed border for violin plot
+    for spine in ["top", "right", "bottom", "left"]:
+        ax2.spines[spine].set_visible(True)
+        ax2.spines[spine].set_linewidth(1.0)
+        ax2.spines[spine].set_color("black")
 
     # ========================
-    #  Shared Legend (bottom)
+    # Shared Legend
     # ========================
-    handles = [Patch(facecolor=colors[i % len(colors)], edgecolor="black", label=lbl) for i, lbl in enumerate(labels)]
-    fig.legend(handles=handles,
-               loc="lower center",
-               bbox_to_anchor=(0.5, -0.02),
-               ncol=min(6, len(labels)),
-               frameon=False,
-               fontsize=10)
+    handles = [Patch(facecolor=colors[i % len(colors)], edgecolor="black", label=lbl)
+               for i, lbl in enumerate(labels)]
+    fig.legend(
+        handles=handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.02),
+        ncol=min(6, len(labels)),
+        frameon=False,
+        fontsize=10
+    )
 
-    # ========================
-    #  Save Figure
-    # ========================
+    # -------------------- Save --------------------
     fig.tight_layout(rect=[0, 0.08, 1, 1])
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
+
 
 
 
