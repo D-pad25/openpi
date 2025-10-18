@@ -303,19 +303,28 @@ def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
                color=colors[i % len(colors)], alpha=0.9,
                edgecolor="black", linewidth=0.8)
         for j, v in enumerate(values[i]):
-            ax.text(x[j] + i * width - (len(labels) - 1) * width / 2,
-                    v, f"{v:.3f}", ha="center", va="bottom", fontsize=8)
+            ax.text(
+                x[j] + i * width - (len(labels) - 1) * width / 2,
+                v,
+                f"{v:.3f}",
+                ha="center", va="bottom",
+                fontsize=12,            # ← Larger font size
+                rotation=45,            # ← Angled labels
+                rotation_mode="anchor", # Keeps alignment neat
+                fontweight="semibold",  # Optional for better visibility
+            )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(["MAE (All 7)", "MAE (Joints 6)", "MAE (Gripper)"])
-    ax.set_ylabel("Mean Absolute Error (rad)")
-    ax.set_title("Model Comparison – Mean Absolute Error")
+    ax.set_xticklabels(["MAE (All 7)", "MAE (Joints 6)", "MAE (Gripper)"], fontsize=12)
+    ax.set_ylabel("Mean Absolute Error (rad)", fontsize=12)
+    ax.set_title("Model Comparison – Mean Absolute Error", fontsize=14, fontweight="bold")
 
     _two_dp_ticks(ax, y=True)
     _legend_below(ax)
     fig.tight_layout(rect=[0, 0.08, 1, 1])
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
+
 
 
 def plot_violin_pres(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str):
@@ -338,7 +347,7 @@ def plot_violin_pres(dfs: List[pd.DataFrame], labels: List[str], col: str, out_p
 
     ax.set_xticks(np.arange(1, len(labels) + 1))
     ax.set_xticklabels(labels, rotation=20)
-    ax.set_ylabel("MAE (rad)")
+    ax.set_ylabel("Mean Absoloute Error (rad)")
     ax.set_title("Distribution of Mean Absolute Error Across Models")
 
     _two_dp_ticks(ax, y=True)
