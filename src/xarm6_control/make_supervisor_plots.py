@@ -320,35 +320,72 @@ def plot_aggregate_bars_pres(aggregates: List[Tuple[str, dict]], out_path: str):
     plt.close(fig)
 
 
+# def plot_violin_pres(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str):
+#     _presentation_style()
+#     data = [df[col].dropna().values for df in dfs]
+#     colors = plt.cm.tab10.colors[:len(labels)]
+
+#     fig, ax = plt.subplots(figsize=(8, 6))
+#     parts = ax.violinplot(data, showmeans=True, showmedians=True, widths=0.7)
+
+#     for i, pc in enumerate(parts['bodies']):
+#         pc.set_facecolor(colors[i % len(colors)])
+#         pc.set_edgecolor("black")
+#         pc.set_alpha(0.8)
+
+#     for partname in ('cbars', 'cmins', 'cmaxes', 'cmeans', 'cmedians'):
+#         vp = parts[partname]
+#         vp.set_edgecolor("black")
+#         vp.set_linewidth(1.2)
+
+#     ax.set_xticks(np.arange(1, len(labels) + 1))
+#     ax.set_xticklabels(labels, rotation=20)
+#     ax.set_xticklabels(["pi0 base", "pi0 DROID", "pi0 FAST base", "pi0 FAST DROID", "Diffusion", "AgriVLA"], rotation=20)
+#     ax.set_ylabel("Mean Absolute Error (rad)")
+#     ax.set_title("Distribution of Mean Absolute Error Across Models", fontweight="bold")
+
+#     _two_dp_ticks(ax, y=True)
+#     # _legend_below(ax, labels=labels, colors=colors)
+#     fig.tight_layout(rect=[0, 0.12, 1, 1])
+#     fig.savefig(out_path, bbox_inches="tight")
+#     plt.close(fig)
+
 def plot_violin_pres(dfs: List[pd.DataFrame], labels: List[str], col: str, out_path: str):
     _presentation_style()
-    data = [df[col].dropna().values for df in dfs]
-    colors = plt.cm.tab10.colors[:len(labels)]
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    # Data per run
+    data = [df[col].dropna().values for df in dfs]
+    n = len(labels)
+    colors = plt.cm.tab10.colors[:n]
+
+    # Figure
+    fig, ax = plt.subplots(figsize=(max(8, 1.4 * n + 2), 6))  # widen a bit with #runs
     parts = ax.violinplot(data, showmeans=True, showmedians=True, widths=0.7)
 
+    # Styling per violin
     for i, pc in enumerate(parts['bodies']):
         pc.set_facecolor(colors[i % len(colors)])
         pc.set_edgecolor("black")
-        pc.set_alpha(0.8)
+        pc.set_alpha(0.85)
 
-    for partname in ('cbars', 'cmins', 'cmaxes', 'cmeans', 'cmedians'):
-        vp = parts[partname]
+    for k in ('cbars', 'cmins', 'cmaxes', 'cmeans', 'cmedians'):
+        vp = parts[k]
         vp.set_edgecolor("black")
         vp.set_linewidth(1.2)
 
-    ax.set_xticks(np.arange(1, len(labels) + 1))
+    # X ticks = dynamic (1..n), labels = your provided labels
+    ax.set_xticks(np.arange(1, n + 1))
     ax.set_xticklabels(labels, rotation=20)
-    ax.set_xticklabels(["pi0 base", "pi0 DROID", "pi0 FAST base", "pi0 FAST DROID", "Diffusion", "AgriVLA"], rotation=20)
+
     ax.set_ylabel("Mean Absolute Error (rad)")
     ax.set_title("Distribution of Mean Absolute Error Across Models", fontweight="bold")
 
     _two_dp_ticks(ax, y=True)
-    # _legend_below(ax, labels=labels, colors=colors)
+    # No legend needed; labels are on the x-axis
     fig.tight_layout(rect=[0, 0.12, 1, 1])
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
+
 
 def plot_bar_violin_combined_pres(aggregates: List[Tuple[str, dict]],
                                   dfs: List[pd.DataFrame],
