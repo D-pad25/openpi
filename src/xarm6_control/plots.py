@@ -115,12 +115,12 @@ def _legend_below(ax, labels=None, colors=None):
         handles = [Patch(facecolor=colors[i % len(colors)], edgecolor="black", label=lbl)
                    for i, lbl in enumerate(labels)]
         leg = ax.legend(handles=handles, loc="upper center",
-                        bbox_to_anchor=(0.5, -0.12), ncol=min(4, len(labels)),
+                        bbox_to_anchor=(0.5, -0.2), ncol=min(4, len(labels)),
                         frameon=False)
     else:
         handles, _labels = ax.get_legend_handles_labels()
         leg = ax.legend(handles, _labels, loc="upper center",
-                        bbox_to_anchor=(0.5, -0.12), ncol=min(4, len(_labels)),
+                        bbox_to_anchor=(0.5, -0.2), ncol=min(4, len(_labels)),
                         frameon=False)
     return leg
 
