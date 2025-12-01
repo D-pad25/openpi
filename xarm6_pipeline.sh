@@ -7,6 +7,7 @@ set -euo pipefail
 
 # HPC details
 HPC_USER="n10813934"
+HPC_PREFIX="aqua"
 HPC_HOST="aqua.qut.edu.au"
 HPC_REPO_DIR="/home/n10813934/openpi"   # path to repo on HPC
 
@@ -62,7 +63,7 @@ EOF
 
 run_hpc_cmd() {
   # Run a command on the HPC in the repo directory with the venv activated
-  ssh "${HPC_USER}@${HPC_HOST}" "cd '${HPC_REPO_DIR}' && source '${VENV_DIR}/bin/activate' && $1"
+  ssh "${HPC_PREFIX}" "cd '${HPC_REPO_DIR}' && source '${VENV_DIR}/bin/activate' && $1"
 }
 
 ###############################################
