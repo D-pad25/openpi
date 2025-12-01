@@ -9,7 +9,7 @@ set -euo pipefail
 HPC_USER="n10813934"
 HPC_PREFIX="aqua"
 HPC_HOST="aqua.qut.edu.au"
-HPC_REPO_DIR="/home/n10813934/openpi"   # path to repo on HPC
+HPC_REPO_DIR="/home/n10813934/gitRepos/openpi"   # path to repo on HPC
 
 # Local machine repo path (where xarm6_control lives)
 LOCAL_REPO_DIR="$HOME/openpi"           # adjust as needed
