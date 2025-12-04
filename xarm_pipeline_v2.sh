@@ -26,7 +26,7 @@ TRAIN_CONFIG="pi0base_lora_xarm6_round2_fulldataset"
 
 # Policy server / tunnel settings
 POLICY_PORT="8000"
-REMOTE_POLICY_HOST="10.13.22.1"         # internal node for tunnel on QUT network
+REMOTE_POLICY_HOST="10.13.22.2"         # internal node for tunnel on QUT network
 
 # Virtual environment name (both HPC + local)
 VENV_DIR=".venv"
