@@ -81,7 +81,7 @@ source \"\$VENV_DIR/bin/activate\"
 
 NODE_HOST=\$(hostname)
 NODE_IP=$(hostname -I | tr ' ' '\n' | grep '^10\.' | head -n 1)
-NODE_IP=\$(python -c "import socket; print(socket.gethostbyname(socket.gethostname()))")
+NODE_IP=\$(python -c 'import socket; print(socket.gethostbyname(socket.gethostname()))')
 
 echo \"[openpi_cmd] Running on node: \$NODE_HOST with IP: \$NODE_IP\"
 echo \"[openpi_cmd] Using Python: \$(which python)\"
