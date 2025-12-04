@@ -68,14 +68,11 @@ EOF
 run_hpc_cmd() {
   local job_cmd="$1"
 
-  # This ssh:
-  #  - sets env vars JOB_CMD, HPC_REPO_DIR, VENV_DIR on the login node
-  #  - then calls qsub with an embedded PBS batch script (heredoc)
-  ssh "${HPC_PREFIX}" "JOB_CMD=\"$job_cmd\" HPC_REPO_DIR='${HPC_REPO_DIR}' VENV_DIR='${VENV_DIR}' qsub << 'EOF'
+  ssh "${HPC_PREFIX}" "export JOB_CMD=\"$job_cmd\" HPC_REPO_DIR='${HPC_REPO_DIR}' VENV_DIR='${VENV_DIR}'; qsub -V << 'EOF'
 #!/bin/bash
 #PBS -N openpi_cmd
 #PBS -l select=1:ncpus=12:ngpus=1:mem=64gb:gpu_id=H100
-#PBS -l walltime=4:00:00
+#PBS -l walltime=04:00:00
 #PBS -j oe
 
 set -euo pipefail
@@ -92,6 +89,7 @@ eval \"\$JOB_CMD\"
 echo \"[openpi_cmd] Command finished.\"
 EOF"
 }
+
 
 ###############################################
 # Commands
