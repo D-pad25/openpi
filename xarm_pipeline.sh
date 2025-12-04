@@ -80,7 +80,7 @@ cd \"\$HPC_REPO_DIR\"
 source \"\$VENV_DIR/bin/activate\"
 
 NODE_HOST=\$(hostname)
-NODE_IP=\$(hostname -I | awk '{print \$1}')
+NODE_IP=$(hostname -I | tr ' ' '\n' | grep '^10\.' | head -n 1)
 
 echo \"[openpi_cmd] Running on node: \$NODE_HOST with IP: \$NODE_IP\"
 echo \"[openpi_cmd] Using Python: \$(which python)\"
@@ -140,7 +140,7 @@ case "$cmd" in
   ################################################
   tunnel)
     echo ">>> Discovering policy server endpoint on HPC..."
-    endpoint=$(ssh "${HPC_USER}@${HPC_HOST}" "cat ~/.openpi_policy_endpoint 2>/dev/null || echo ''")
+    endpoint=$(ssh "${HPC_PREFIX}" "cat ~/.openpi_policy_endpoint 2>/dev/null || echo ''")
 
     if [[ -z "$endpoint" ]]; then
       echo "!!! No policy endpoint file found on HPC (~/.openpi_policy_endpoint)."
