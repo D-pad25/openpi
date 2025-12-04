@@ -133,7 +133,7 @@ case "$cmd" in
   tunnel)
     echo ">>> Creating SSH tunnel localhost:${POLICY_PORT} -> ${REMOTE_POLICY_HOST}:${POLICY_PORT} via ${HPC_HOST}..."
     echo ">>> Leave this command running while you use the client."
-    ssh -L "${POLICY_PORT}:${REMOTE_POLICY_HOST}:${POLICY_PORT}" "${HPC_USER}@${HPC_HOST}"
+    ssh -L "${POLICY_PORT}:${REMOTE_POLICY_HOST}:${POLICY_PORT}" "${HPC_PREFIX}"
     ;;
 
   ################################################
