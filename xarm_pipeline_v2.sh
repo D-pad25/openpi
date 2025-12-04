@@ -7,12 +7,14 @@ set -euo pipefail
 
 # HPC details
 HPC_USER="n10813934"
+# This should match your SSH alias or explicit user@host
+# e.g. "aqua" if you have an SSH config entry, or "n10813934@aqua.qut.edu.au"
 HPC_PREFIX="aqua"
 HPC_HOST="aqua.qut.edu.au"
 HPC_REPO_DIR="/home/n10813934/gitRepos/openpi"   # path to repo on HPC
 
 # Local machine repo path (where xarm6_control lives)
-LOCAL_REPO_DIR="$HOME/openpi"           # adjust as needed
+LOCAL_REPO_DIR="$HOME/openpi"           # adjust to e.g. "$HOME/Thesis/openpi" if needed
 
 # Dataset paths (on HPC)
 DATA_DIR="/home/n10813934/data/tfds_datasets"
@@ -24,7 +26,7 @@ TRAIN_CONFIG="pi0base_lora_xarm6_round2_fulldataset"
 
 # Policy server / tunnel settings
 POLICY_PORT="8000"
-REMOTE_POLICY_HOST="10.13.22.1"         # internal node for tunnel
+REMOTE_POLICY_HOST="10.13.22.1"         # internal node for tunnel on QUT network
 
 # Virtual environment name (both HPC + local)
 VENV_DIR=".venv"
@@ -37,16 +39,16 @@ usage() {
   cat <<EOF
 Usage: $0 <command>
 
-Data & training (HPC via ssh):
-  convert-data     Convert RLDS -> LeRobot format
-  inspect-data     Run inspect_lerobot_dataset.py
-  train            Compute norm stats (and use config.py)
+Data & training (HPC via qsub on GPU node):
+  convert-data     Convert RLDS -> LeRobot format (GPU job)
+  inspect-data     Run inspect_lerobot_dataset.py (GPU job)
+  train            Compute norm stats (and use config.py) (GPU job)
 
-Policy server (HPC via ssh):
-  serve-policy     Run scripts/serve_policy.py on HPC
+Policy server (HPC via qsub on GPU node):
+  serve-policy     Run scripts/serve_policy.py on GPU node (job; prints PBS job ID)
 
 Networking:
-  tunnel           Create SSH tunnel: localhost:${POLICY_PORT}  ->${REMOTE_POLICY_HOST}:${POLICY_PORT}
+  tunnel           Create SSH tunnel: localhost:${POLICY_PORT} -> ${REMOTE_POLICY_HOST}:${POLICY_PORT}
 
 Local xArm client side:
   cameras          Launch camera nodes (requires local venv)
@@ -61,17 +63,34 @@ General:
 EOF
 }
 
+# Submit a GPU job on the HPC via qsub and run the given command inside the job.
+# The command is passed as a single string (job_cmd).
 run_hpc_cmd() {
-  # Start an interactive qsub session and run the given command inside it
-  ssh "${HPC_PREFIX}" << EOF
-qsub -I -S /bin/bash \
-    -l select=1:ncpus=12:ngpus=1:mem=64gb:gpu_id=H100 \
-    -l walltime=4:00:00 << 'INNER_EOF'
-cd '${HPC_REPO_DIR}'
-source '${VENV_DIR}/bin/activate'
-$1
-INNER_EOF
-EOF
+  local job_cmd="$1"
+
+  # This ssh:
+  #  - sets env vars JOB_CMD, HPC_REPO_DIR, VENV_DIR on the login node
+  #  - then calls qsub with an embedded PBS batch script (heredoc)
+  ssh "${HPC_PREFIX}" "JOB_CMD=\"$job_cmd\" HPC_REPO_DIR='${HPC_REPO_DIR}' VENV_DIR='${VENV_DIR}' qsub << 'EOF'
+#!/bin/bash
+#PBS -N openpi_cmd
+#PBS -l select=1:ncpus=12:ngpus=1:mem=64gb:gpu_id=H100
+#PBS -l walltime=4:00:00
+#PBS -j oe
+
+set -euo pipefail
+
+cd \"\$HPC_REPO_DIR\"
+source \"\$VENV_DIR/bin/activate\"
+
+echo \"[openpi_cmd] Running on node: \$(hostname)\"
+echo \"[openpi_cmd] Using Python: \$(which python)\"
+echo \"[openpi_cmd] Starting command: \$JOB_CMD\"
+
+eval \"\$JOB_CMD\"
+
+echo \"[openpi_cmd] Command finished.\"
+EOF"
 }
 
 ###############################################
@@ -83,36 +102,31 @@ shift || true
 
 case "$cmd" in
   ################################################
-  # DATA & TRAINING (HPC)
+  # DATA & TRAINING (HPC via GPU job)
   ################################################
   convert-data)
-    echo ">>> Converting RLDS data -> LeRobot on HPC..."
+    echo ">>> Submitting RLDS -> LeRobot conversion as GPU job on HPC..."
     run_hpc_cmd "uv run examples/libero/convert_libero_data_to_lerobot.py --data_dir '${DATA_DIR}'"
-    echo ">>> Done. Output should be in: ${LEROBOT_ROOT}"
+    echo ">>> Job submitted. Output dataset should end up in: ${LEROBOT_ROOT}"
     ;;
 
   inspect-data)
-    echo ">>> Inspecting LeRobot dataset on HPC..."
-    run_hpc_cmd "uv run examples/libero/inspect_lerobot_dataset.py \
-      --repo_id '${REPO_ID}' \
-      --root '${LEROBOT_ROOT}'"
+    echo ">>> Submitting LeRobot dataset inspection as GPU job on HPC..."
+    run_hpc_cmd "uv run examples/libero/inspect_lerobot_dataset.py --repo_id '${REPO_ID}' --root '${LEROBOT_ROOT}'"
     ;;
 
   train)
-    echo ">>> Running compute_norm_stats on HPC using config: ${TRAIN_CONFIG}"
-    # If you use W&B secrets, they should live in ~/.wandb_secrets on the HPC
-    run_hpc_cmd "source ~/.wandb_secrets 2>/dev/null || true; \
-      uv run scripts/compute_norm_stats.py --config-name '${TRAIN_CONFIG}'"
+    echo ">>> Submitting compute_norm_stats as GPU job on HPC using config: ${TRAIN_CONFIG}"
+    run_hpc_cmd "source ~/.wandb_secrets 2>/dev/null || true; uv run scripts/compute_norm_stats.py --config-name '${TRAIN_CONFIG}'"
     ;;
 
   ################################################
-  # POLICY SERVER (HPC)
+  # POLICY SERVER (HPC via GPU job)
   ################################################
   serve-policy)
-    echo ">>> Starting policy server on HPC (port ${POLICY_PORT})..."
-    run_hpc_cmd "export OPENPI_DATA_HOME=\$HOME/.cache/openpi; \
-      uv run scripts/serve_policy.py --env XARM --port ${POLICY_PORT}"
-    # This will keep running in the SSH session until you stop it.
+    echo ">>> Submitting policy server as GPU job on HPC (port ${POLICY_PORT})..."
+    run_hpc_cmd "export OPENPI_DATA_HOME=\$HOME/.cache/openpi; uv run scripts/serve_policy.py --env XARM --port ${POLICY_PORT}"
+    echo ">>> Policy server job submitted. Once it's running, you can start the tunnel."
     ;;
 
   ################################################
@@ -125,7 +139,7 @@ case "$cmd" in
     ;;
 
   ################################################
-  # LOCAL CLIENT SIDE
+  # LOCAL CLIENT SIDE (xArm machine)
   ################################################
   cameras)
     echo ">>> Launching camera nodes (local machine)..."
