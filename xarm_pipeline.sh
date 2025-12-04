@@ -161,7 +161,7 @@ case "$cmd" in
 
     echo ">>> Creating SSH tunnel localhost:${remote_port} -> ${remote_ip}:${remote_port} via ${HPC_HOST}..."
     echo ">>> Leave this command running while you use the client."
-    ssh -L "${remote_port}:${remote_ip}:${remote_port}" "${HPC_USER}@${HPC_HOST}"
+    ssh -L "${remote_port}:${remote_ip}:${remote_port}" "${HPC_PREFIX}"
     ;;
 
   ################################################
