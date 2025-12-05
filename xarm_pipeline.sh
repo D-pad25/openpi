@@ -166,6 +166,61 @@ case "$cmd" in
     ;;
 
   ################################################
+  # STATUS (LOCAL → HPC)
+  ################################################
+  status)
+    echo ">>> Checking policy server status on HPC..."
+
+    # 1. Read endpoint file
+    endpoint=$(ssh "${HPC_PREFIX}" "cat ~/.openpi_policy_endpoint 2>/dev/null || echo ''")
+    if [[ -z "$endpoint" ]]; then
+      echo "❌ No endpoint file found. Server is NOT running."
+      echo "   Run: ./xarm_pipeline.sh serve-policy"
+      exit 1
+    fi
+
+    # extract HOST, IP, PORT
+    host=$(echo "$endpoint" | awk -F= '/^HOST=/{print $2}')
+    ip=$(echo "$endpoint" | awk -F= '/^IP=/{print $2}')
+    port=$(echo "$endpoint" | awk -F= '/^PORT=/{print $2}')
+
+    echo "→ Endpoint file found:"
+    echo "   Host: $host"
+    echo "   IP:   $ip"
+    echo "   Port: $port"
+    echo ""
+
+    # 2. Check if job is running
+    job_info=$(ssh "${HPC_PREFIX}" "qstat -u ${HPC_USER} | grep openpi_cmd || true")
+
+    if [[ -z "$job_info" ]]; then
+      echo "❌ No openpi_cmd job running."
+      echo "   The server has stopped."
+      exit 1
+    else
+      job_id=$(echo "$job_info" | awk '{print $1}')
+      job_state=$(echo "$job_info" | awk '{print $10}')
+      echo "→ PBS Job ID: $job_id"
+      echo "→ Job state: $job_state"
+    fi
+
+    echo ""
+
+    # 3. Check if the server port is actually listening
+    echo ">>> Checking if port $port is open on $host..."
+    port_check=$(ssh "${HPC_PREFIX}" "ssh $host 'netstat -tln | grep :$port' 2>/dev/null || true")
+
+    if [[ -z "$port_check" ]]; then
+      echo "❌ Port is NOT open. The server may still be loading or failed."
+    else
+      echo "✅ Server is listening on $ip:$port"
+    fi
+
+    echo ""
+    echo "Status check complete."
+    ;;
+
+  ################################################
   # LOCAL CLIENT SIDE (xArm machine)
   ################################################
   cameras)
