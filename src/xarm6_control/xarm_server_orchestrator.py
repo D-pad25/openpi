@@ -30,15 +30,25 @@ import websockets.sync.client
 
 @dataclass
 class OrchestratorConfig:
-    # Paths and IDs – adjust if needed
-    hpc_prefix: str = "aqua"  # SSH alias or user@host, e.g. "aqua" or "n10813934@aqua.qut.edu.au"
-    pipeline_script: Path = Path("./xarm_pipeline.sh")
+    # SSH alias or user@host
+    hpc_prefix: str = "aqua"
+
+    # Directory where this file lives: src/xarm6_control
+    here: Path = Path(__file__).resolve().parent
+
+    # Pipeline script lives alongside this orchestrator
+    pipeline_script: Path = field(init=False)
+
     policy_port: int = 8000
-    endpoint_file: str = "~/.openpi_policy_endpoint"  # on HPC side
-    # How long to wait for things
-    wait_endpoint_timeout_s: int = 300   # 5 minutes
+    endpoint_file: str = "~/.openpi_policy_endpoint"  # on HPC
+
+    wait_endpoint_timeout_s: int = 300
     wait_endpoint_poll_s: int = 5
-    ws_health_timeout_s: int = 3        # per WebSocket probe
+    ws_health_timeout_s: int = 3
+
+    def __post_init__(self):
+        # Adjust the name if your script is called something else
+        self.pipeline_script = self.here / "xarm_pipeline.sh"
 
 
 # ============================
