@@ -169,6 +169,7 @@ class Orchestrator:
                     if line.startswith("HOST="):
                         host = line.split("=", 1)[1].strip()
                     elif line.startswith("IP="):
+                        print(f"[DEBUG] Found IP line: {line}")
                         ip = line.split("=", 1)[1].strip()
                     elif line.startswith("PORT="):
                         port = int(line.split("=", 1)[1].strip())
