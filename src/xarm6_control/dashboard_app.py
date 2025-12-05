@@ -18,10 +18,9 @@ from __future__ import annotations
 
 import threading
 import time
-from pathlib import Path
 from typing import Optional, Dict, Any, Generator
 
-import cv2  # OpenCV for camera capture (pip install opencv-python)
+import cv2  # OpenCV for camera capture
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import (
@@ -30,7 +29,7 @@ from fastapi.responses import (
     JSONResponse,
 )
 
-# Import your existing orchestrator
+# Import orchestrator (with CLEARING_OLD_ENDPOINT, health polling, etc.)
 from xarm6_control.xarm_server_orchestrator import (
     Orchestrator,
     OrchestratorConfig,
@@ -38,53 +37,70 @@ from xarm6_control.xarm_server_orchestrator import (
 )
 
 # ============================================================
-# Global orchestrator + thread management
+# Global orchestrator + thread + status storage
 # ============================================================
 
 app = FastAPI(title="XArm6 Demo Dashboard")
 
-_orch_lock = threading.Lock()
+_status_lock = threading.Lock()
+_last_status: Dict[str, Any] = {
+    "state": OrchestratorState.IDLE.value,
+    "message": "Idle",
+}
+
 _orchestrator: Optional[Orchestrator] = None
-_orchestrator_thread: Optional[threading.Thread] = None
+_orch_thread: Optional[threading.Thread] = None
+_orch_thread_lock = threading.Lock()
 
 
-def _get_orchestrator() -> Optional[Orchestrator]:
-    global _orchestrator
-    return _orchestrator
+def _on_state_change(state: OrchestratorState, message: str) -> None:
+    """Callback from Orchestrator to update status for UI."""
+    with _status_lock:
+        _last_status["state"] = state.value
+        _last_status["message"] = message
+    print(f"[DASHBOARD] {state.value}: {message}")
 
 
-def _start_orchestrator_thread() -> None:
+def _start_orchestrator_thread() -> bool:
     """
-    Create a new Orchestrator and run its full sequence in a background thread.
-    If one is already running, this function does nothing.
+    Start orchestrator.run_full_sequence() in a background thread.
+
+    Returns:
+        True  if a new thread was started.
+        False if an orchestration is already in progress or server is READY.
     """
-    global _orchestrator, _orchestrator_thread
+    global _orchestrator, _orch_thread
 
-    with _orch_lock:
-        if _orchestrator_thread is not None and _orchestrator_thread.is_alive():
-            # Already running
-            return
+    with _orch_thread_lock:
+        # If thread exists and is still alive, we consider orchestration "busy".
+        if _orch_thread is not None and _orch_thread.is_alive():
+            return False
 
-        # Fresh orchestrator instance
+        # If an orchestrator exists and is already READY, don't start again.
+        if _orchestrator is not None and _orchestrator.state == OrchestratorState.READY:
+            return False
+
+        # Create fresh orchestrator and thread
         config = OrchestratorConfig()
         orch = Orchestrator(config=config)
+        orch.on_state_change = _on_state_change
         _orchestrator = orch
 
         def _run():
             try:
                 orch.run_full_sequence()
             finally:
-                # When done (success or failure), we keep the orchestrator
-                # object around so the UI can still read the last state/message.
+                # Keep orchestrator object so UI can still display final state.
                 pass
 
         t = threading.Thread(target=_run, daemon=True)
-        _orchestrator_thread = t
+        _orch_thread = t
         t.start()
+        return True
 
 
 # ============================================================
-# Simple camera streaming via MJPEG (demo-style)
+# Camera streaming via MJPEG (demo-style)
 # ============================================================
 
 class CameraStream:
@@ -106,14 +122,13 @@ class CameraStream:
         with self._lock:
             if self._cap is None or not self._cap.isOpened():
                 self._cap = cv2.VideoCapture(self.device_index)
-                # Optionally set resolution / fps here:
+                # Optionally set properties here:
                 # self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
                 # self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
     def frames(self) -> Generator[bytes, None, None]:
         self._ensure_open()
         if self._cap is None or not self._cap.isOpened():
-            # Yield a single black frame or nothing
             blank = self._black_frame()
             yield blank
             return
@@ -125,7 +140,6 @@ class CameraStream:
                 time.sleep(0.1)
                 continue
 
-            # Encode frame as JPEG
             ret, jpeg = cv2.imencode(".jpg", frame)
             if not ret:
                 continue
@@ -145,7 +159,7 @@ class CameraStream:
         return jpeg.tobytes()
 
 
-# Two logical cameras – adjust indices to match your system
+# Adjust indices to your base / wrist cameras
 base_camera = CameraStream(device_index=0, name="base")
 wrist_camera = CameraStream(device_index=1, name="wrist")
 
@@ -354,6 +368,7 @@ INDEX_HTML = """
       <div class="meta-row">
         <span id="meta-job">Job: —</span>
         <span id="meta-remote">Remote: —</span>
+        <span id="meta-server">Server: NOT RUNNING</span>
       </div>
 
       <div style="margin-top: 8px; font-size: 0.8rem; color: #9ca3af;">
@@ -368,39 +383,61 @@ INDEX_HTML = """
   </footer>
 
   <script>
-    const statusChip = document.getElementById("status-chip");
     const statusDot = document.getElementById("status-dot");
     const statusText = document.getElementById("status-text");
     const metaJob = document.getElementById("meta-job");
     const metaRemote = document.getElementById("meta-remote");
+    const metaServer = document.getElementById("meta-server");
     const lastMessage = document.getElementById("last-message");
     const runBtn = document.getElementById("run-btn");
     const healthBtn = document.getElementById("health-btn");
 
     function updateStatusView(data) {
-      const state = data.state || "IDLE";
+      const state = (data.state || "IDLE").toUpperCase();
       const msg = data.message || "";
       const jobId = data.job_id || "—";
       const remote = (data.remote_ip && data.remote_port)
         ? `${data.remote_ip}:${data.remote_port}`
         : "—";
+      const serverRunning = !!data.server_running;
 
       statusText.textContent = state;
       lastMessage.textContent = msg;
       metaJob.textContent = `Job: ${jobId}`;
       metaRemote.textContent = `Remote: ${remote}`;
+      metaServer.textContent = `Server: ${serverRunning ? "RUNNING" : "NOT RUNNING"}`;
 
       statusDot.className = "status-dot";
-
-      const s = state.toUpperCase();
-      if (s === "READY") {
+      if (state === "READY") {
         statusDot.classList.add("status-ready");
-      } else if (s.startsWith("ERROR")) {
+      } else if (state.startsWith("ERROR")) {
         statusDot.classList.add("status-error");
-      } else if (s === "IDLE") {
+      } else if (state === "IDLE") {
         statusDot.classList.add("status-idle");
       } else {
         statusDot.classList.add("status-busy");
+      }
+
+      // Button enable/disable:
+      const busyStates = [
+        "CLEARING_OLD_ENDPOINT",
+        "SUBMITTING_JOB",
+        "JOB_QUEUED",
+        "JOB_RUNNING_STARTING_SERVER",
+        "SERVER_READY_NO_TUNNEL",
+        "STARTING_TUNNEL",
+        "CHECKING_POLICY_HEALTH",
+      ];
+
+      if (state === "READY") {
+        runBtn.disabled = true;
+        runBtn.textContent = "Server running";
+      } else if (busyStates.includes(state)) {
+        runBtn.disabled = true;
+        runBtn.textContent = "Running...";
+      } else {
+        runBtn.disabled = false;
+        runBtn.textContent = "▶ Run Policy Server";
       }
     }
 
@@ -416,21 +453,14 @@ INDEX_HTML = """
     }
 
     async function runServer() {
-      runBtn.disabled = true;
-      runBtn.textContent = "Running...";
       try {
-        const resp = await fetch("/api/start_server", { method: "POST" });
+        const resp = await fetch("/api/run-server", { method: "POST" });
         if (!resp.ok) {
           const text = await resp.text();
           alert("Failed to start server: " + text);
         }
       } catch (e) {
         alert("Error starting server: " + e);
-      } finally {
-        setTimeout(() => {
-          runBtn.disabled = false;
-          runBtn.textContent = "▶ Run Policy Server";
-        }, 2000);
       }
     }
 
@@ -467,44 +497,58 @@ def index() -> str:
 
 @app.get("/api/status", response_class=JSONResponse)
 def api_status() -> Dict[str, Any]:
-    orch = _get_orchestrator()
-    if orch is None:
-        return {
-            "state": "IDLE",
-            "message": "No orchestrator has run yet.",
-            "job_id": None,
-            "remote_ip": None,
-            "remote_port": None,
-        }
+    """
+    Return latest orchestrator state + message + job/remote info.
+    Also expose a simple server_running flag for the UI.
+    """
+    with _status_lock:
+        state = _last_status["state"]
+        message = _last_status["message"]
+
+    orch = _orchestrator
+    job_id = orch.job_id if orch is not None else None
+    remote_ip = orch.remote_ip if orch is not None else None
+    remote_port = orch.remote_port if orch is not None else None
+
+    server_running = state == OrchestratorState.READY.value
 
     return {
-        "state": orch.state.value,
-        "message": orch.last_message,
-        "job_id": orch.job_id,
-        "remote_ip": orch.remote_ip,
-        "remote_port": orch.remote_port,
+        "state": state,
+        "message": message,
+        "job_id": job_id,
+        "remote_ip": remote_ip,
+        "remote_port": remote_port,
+        "server_running": server_running,
     }
 
 
-@app.post("/api/start_server", response_class=JSONResponse)
-def api_start_server() -> Dict[str, Any]:
-    with _orch_lock:
-        global _orchestrator_thread
+@app.post("/api/run-server", response_class=JSONResponse)
+def api_run_server() -> Dict[str, Any]:
+    """
+    Start the orchestrator sequence in a background thread.
 
-        if _orchestrator_thread is not None and _orchestrator_thread.is_alive():
-            raise HTTPException(
-                status_code=409,
-                detail="Orchestrator is already running.",
-            )
+    Prevents starting a second sequence if the server/job is already running/busy.
+    """
+    started = _start_orchestrator_thread()
+    if not started:
+        raise HTTPException(
+            status_code=409,
+            detail="Server orchestration already running or server already READY.",
+        )
 
-        _start_orchestrator_thread()
+    with _status_lock:
+        _last_status["state"] = OrchestratorState.SUBMITTING_JOB.value
+        _last_status["message"] = "Submitting policy server job..."
 
     return {"status": "started"}
 
 
 @app.get("/api/health", response_class=JSONResponse)
 def api_health() -> Dict[str, Any]:
-    orch = _get_orchestrator()
+    """
+    Trigger an explicit health check using the orchestrator's method.
+    """
+    orch = _orchestrator
     if orch is None:
         return {"status": "unknown", "detail": "Orchestrator has not run yet."}
 
@@ -538,7 +582,6 @@ def video_wrist() -> StreamingResponse:
 if __name__ == "__main__":
     import uvicorn
 
-    # Listen only on localhost; adjust if you want LAN access
     uvicorn.run(
         "xarm6_control.dashboard_app:app",
         host="0.0.0.0",
