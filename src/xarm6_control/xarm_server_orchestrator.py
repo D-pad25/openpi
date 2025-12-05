@@ -49,6 +49,7 @@ class OrchestratorConfig:
     def __post_init__(self):
         # Adjust the name if your script is called something else
         self.pipeline_script = self.here / "xarm_pipeline.sh"
+        print(f"[CONFIG] Using pipeline script at: {self.pipeline_script}")
 
 
 # ============================
