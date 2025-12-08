@@ -36,6 +36,12 @@ from xarm6_control.xarm_server_orchestrator import (
     OrchestratorState,
 )
 
+# Import ZMQ camera backend (separate file)
+from xarm6_control.zmq_camera_backend import (
+    ZmqCameraBackend,
+    mjpeg_stream_generator,
+)
+
 # ============================================================
 # Global orchestrator + thread + status storage
 # ============================================================
@@ -99,69 +105,22 @@ def _start_orchestrator_thread() -> bool:
         return True
 
 
-# ============================================================
-# Camera streaming via MJPEG (demo-style)
-# ============================================================
+# Create shared backends (one per camera)
+base_camera = ZmqCameraBackend(
+    host="127.0.0.1",
+    port=5000,
+    img_size=None,   # or (640, 480) if you want to downsample
+    name="base",
+    target_fps=15.0,
+)
 
-class CameraStream:
-    """
-    Very simple wrapper around OpenCV VideoCapture to serve frames as MJPEG.
-
-    For real deployment with RealSense, you can:
-    - Replace VideoCapture with pyrealsense2 pipeline, OR
-    - Subscribe to your ZMQ camera publisher and decode frames here.
-    """
-
-    def __init__(self, device_index: int, name: str = "camera") -> None:
-        self.device_index = device_index
-        self.name = name
-        self._cap = None
-        self._lock = threading.Lock()
-
-    def _ensure_open(self) -> None:
-        with self._lock:
-            if self._cap is None or not self._cap.isOpened():
-                self._cap = cv2.VideoCapture(self.device_index)
-                # Optionally set properties here:
-                # self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-                # self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-
-    def frames(self) -> Generator[bytes, None, None]:
-        self._ensure_open()
-        if self._cap is None or not self._cap.isOpened():
-            blank = self._black_frame()
-            yield blank
-            return
-
-        while True:
-            with self._lock:
-                ret, frame = self._cap.read()
-            if not ret:
-                time.sleep(0.1)
-                continue
-
-            ret, jpeg = cv2.imencode(".jpg", frame)
-            if not ret:
-                continue
-
-            data = jpeg.tobytes()
-            yield data
-
-    @staticmethod
-    def _black_frame(width: int = 640, height: int = 480) -> bytes:
-        """Return a black JPEG frame if camera is not available."""
-        import numpy as np
-
-        img = np.zeros((height, width, 3), dtype=np.uint8)
-        ret, jpeg = cv2.imencode(".jpg", img)
-        if not ret:
-            return b""
-        return jpeg.tobytes()
-
-
-# Adjust indices to your base / wrist cameras
-base_camera = CameraStream(device_index=0, name="base")
-wrist_camera = CameraStream(device_index=1, name="wrist")
+wrist_camera = ZmqCameraBackend(
+    host="127.0.0.1",
+    port=5001,
+    img_size=None,
+    name="wrist",
+    target_fps=15.0,
+)
 
 
 def mjpeg_stream(camera: CameraStream) -> Generator[bytes, None, None]:
@@ -562,7 +521,7 @@ def api_health() -> Dict[str, Any]:
 @app.get("/video/base")
 def video_base() -> StreamingResponse:
     return StreamingResponse(
-        mjpeg_stream(base_camera),
+        mjpeg_stream_generator(base_camera),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
@@ -570,7 +529,7 @@ def video_base() -> StreamingResponse:
 @app.get("/video/wrist")
 def video_wrist() -> StreamingResponse:
     return StreamingResponse(
-        mjpeg_stream(wrist_camera),
+        mjpeg_stream_generator(wrist_camera),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
