@@ -41,10 +41,8 @@ from typing import Optional, Tuple, Generator
 import cv2
 import numpy as np
 
-# Adjust this import to wherever your ZMQClientCamera lives
-# (you showed `from camera_node import ZMQClientCamera` in your test client)
-from camera_node import ZMQClientCamera
 
+from xarm6_control.zmq_core.camera_node import ZMQClientCamera
 
 class ZmqCameraBackend:
     """
