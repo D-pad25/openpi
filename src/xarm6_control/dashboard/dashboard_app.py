@@ -30,14 +30,14 @@ from fastapi.responses import (
 )
 
 # Import orchestrator (with CLEARING_OLD_ENDPOINT, health polling, etc.)
-from xarm6_control.xarm_server_orchestrator import (
+from xarm6_control.dashboard.xarm_server_orchestrator import (
     Orchestrator,
     OrchestratorConfig,
     OrchestratorState,
 )
 
 # Import ZMQ camera backend (separate file)
-from xarm6_control.zmq_camera_backend import (
+from xarm6_control.dashboard.zmq_camera_backend import (
     ZmqCameraBackend,
     mjpeg_stream_generator,
 )
