@@ -70,6 +70,7 @@ run_hpc_cmd() {
   ssh "${HPC_PREFIX}" "export JOB_CMD=\"$job_cmd\" HPC_REPO_DIR='${HPC_REPO_DIR}' VENV_DIR='${VENV_DIR}'; qsub -V << 'EOF'
 #!/bin/bash
 #PBS -N openpi_cmd
+#PBS -q gpu_batch
 #PBS -l select=1:ncpus=4:ngpus=1:mem=64gb
 #PBS -l walltime=04:00:00
 #PBS -j oe
