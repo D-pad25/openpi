@@ -50,7 +50,7 @@ class OrchestratorConfig:
     ws_health_timeout_s: int = 3
 
     # Overall time to wait for the server to become healthy (with retries)
-    server_health_timeout_s: int = 180
+    server_health_timeout_s: int = 300
     server_health_poll_s: float = 5.0
 
     def __post_init__(self):
