@@ -7,30 +7,84 @@ import zmq
 
 from xarm6_control.cameras.camera import CameraDriver
 
-DEFAULT_CAMERA_PORT = 5000   
+DEFAULT_CAMERA_PORT = 5000
+
 
 class ZMQClientCamera(CameraDriver):
-    """A class representing a ZMQ client for a leader robot."""
+    """
+    ZMQ-based camera client.
 
-    def __init__(self, port: int = DEFAULT_CAMERA_PORT, host: str = "127.0.0.1"):
-        self._context = zmq.Context()
-        self._socket = self._context.socket(zmq.REQ)
-        self._socket.connect(f"tcp://{host}:{port}")
+    Talks to ZMQServerCamera using REQ/REP and returns (image, depth).
+    """
+
+    def __init__(
+        self,
+        port: int = DEFAULT_CAMERA_PORT,
+        host: str = "127.0.0.1",
+        timeout_ms: int = 1000,
+    ):
+        self._host = host
+        self._port = port
+        self._timeout_ms = timeout_ms
+
+        # Use shared context
+        self._context = zmq.Context.instance()
+        self._socket = self._create_socket()
+
+    def _create_socket(self) -> zmq.Socket:
+        sock = self._context.socket(zmq.REQ)
+        addr = f"tcp://{self._host}:{self._port}"
+        sock.connect(addr)
+
+        # Non-blocking-ish behaviour: time out instead of hanging forever
+        sock.setsockopt(zmq.RCVTIMEO, self._timeout_ms)
+        sock.setsockopt(zmq.SNDTIMEO, self._timeout_ms)
+        # Don't keep unsent messages around if we close/recreate
+        sock.setsockopt(zmq.LINGER, 0)
+
+        return sock
+
+    def close(self) -> None:
+        """Close the underlying ZMQ socket."""
+        try:
+            self._socket.close(0)
+        except Exception:
+            # Best-effort close; ignore errors
+            pass
 
     def read(
         self,
         img_size: Optional[Tuple[int, int]] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """Get the current state of the leader robot.
+        """
+        Request a frame from the camera server.
 
         Returns:
-            T: The current state of the leader robot.
+            (image, depth) as numpy arrays.
+
+        Raises:
+            TimeoutError: if the server does not respond within timeout_ms.
+            RuntimeError: for other ZMQ/serialization issues.
         """
-        # pack the image_size and send it to the server
-        send_message = pickle.dumps(img_size)
-        self._socket.send(send_message)
-        state_dict = pickle.loads(self._socket.recv())
-        return state_dict
+        try:
+            # Pack the desired image size (or None) and send it
+            send_message = pickle.dumps(img_size)
+            self._socket.send(send_message)
+
+            # This will raise zmq.Again on timeout because of RCVTIMEO
+            reply = self._socket.recv()
+        except zmq.Again as e:
+            raise TimeoutError(
+                f"Timed out waiting for camera server at {self._host}:{self._port}"
+            ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"ZMQClientCamera read error from {self._host}:{self._port}: {e}"
+            ) from e
+
+        camera_read = pickle.loads(reply)
+        # We expect camera_read to be (image, depth) from RealSenseCamera.read()
+        return camera_read
 
 
 class ZMQServerCamera:
@@ -41,27 +95,46 @@ class ZMQServerCamera:
         host: str = "127.0.0.1",
     ):
         self._camera = camera
-        self._context = zmq.Context()
+        self._context = zmq.Context.instance()
         self._socket = self._context.socket(zmq.REP)
+
         addr = f"tcp://{host}:{port}"
         debug_message = f"Camera Sever Binding to {addr}, Camera: {camera}"
         print(debug_message)
-        self._timout_message = f"Timeout in Camera Server, Camera: {camera}"
+        self._timeout_message = f"Timeout in Camera Server, Camera: {camera}"
+
+        # Time out waiting for client requests so we can check stop flag
+        self._socket.setsockopt(zmq.RCVTIMEO, 1000)  # 1000 ms
+        self._socket.setsockopt(zmq.LINGER, 0)
+
         self._socket.bind(addr)
         self._stop_event = threading.Event()
 
     def serve(self) -> None:
-        """Serve the leader robot state over ZMQ."""
-        self._socket.setsockopt(zmq.RCVTIMEO, 1000)  # Set timeout to 1000 ms
+        """Serve camera frames over ZMQ (REQ/REP)."""
         while not self._stop_event.is_set():
             try:
+                # Wait for a request from client (may timeout)
                 message = self._socket.recv()
+            except zmq.Again:
+                # No request within timeout; just loop and re-check stop flag
+                print(self._timeout_message)
+                continue
+            except zmq.ZMQError as e:
+                print(f"[ZMQServerCamera] ZMQ error receiving: {e}")
+                break
+
+            try:
                 img_size = pickle.loads(message)
                 camera_read = self._camera.read(img_size)
                 self._socket.send(pickle.dumps(camera_read))
-            except zmq.Again:
-                print(self._timout_message)
-                # Timeout occurred, check if the stop event is set
+            except Exception as e:
+                # If camera.read fails, log and send a dummy (None, None)
+                print(f"[ZMQServerCamera] Error reading from camera: {e}")
+                try:
+                    self._socket.send(pickle.dumps((None, None)))
+                except zmq.ZMQError as e2:
+                    print(f"[ZMQServerCamera] Error sending error reply: {e2}")
 
     def stop(self) -> None:
         """Signal the server to stop serving."""

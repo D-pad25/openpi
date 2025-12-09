@@ -63,6 +63,9 @@
       font-size: 0.85rem;
       border-bottom: 1px solid #1f2937;
       background: #050816;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
     .cam-box img {
       width: 100%;
@@ -146,6 +149,21 @@
       border-top: 1px solid #111827;
       text-align: right;
     }
+    .cam-status {
+      font-size: 0.75rem;
+      margin-left: 8px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+    }
+    .cam-online {
+      background: #14532d;
+      color: #bbf7d0;
+    }
+    .cam-offline {
+      background: #450a0a;
+      color: #fecaca;
+    }
   </style>
 </head>
 <body>
@@ -162,11 +180,17 @@
       <h2>Camera Feeds</h2>
       <div class="cams-grid">
         <div class="cam-box">
-          <div class="cam-box-header">Base Camera</div>
+          <div class="cam-box-header">
+            <span>Base Camera</span>
+            <span class="cam-status cam-offline" id="base-status">DISCONNECTED</span>
+          </div>
           <img src="/video/base" alt="Base camera stream" />
         </div>
         <div class="cam-box">
-          <div class="cam-box-header">Wrist Camera</div>
+          <div class="cam-box-header">
+            <span>Wrist Camera</span>
+            <span class="cam-status cam-offline" id="wrist-status">DISCONNECTED</span>
+          </div>
           <img src="/video/wrist" alt="Wrist camera stream" />
         </div>
       </div>
@@ -206,6 +230,9 @@
     const runBtn = document.getElementById("run-btn");
     const healthBtn = document.getElementById("health-btn");
 
+    const baseStatus = document.getElementById("base-status");
+    const wristStatus = document.getElementById("wrist-status");
+
     function updateStatusView(data) {
       const state = (data.state || "IDLE").toUpperCase();
       const msg = data.message || "";
@@ -232,7 +259,6 @@
         statusDot.classList.add("status-busy");
       }
 
-      // Button enable/disable:
       const busyStates = [
         "CLEARING_OLD_ENDPOINT",
         "SUBMITTING_JOB",
@@ -255,6 +281,18 @@
       }
     }
 
+    function updateCameraStatusView(data) {
+      function apply(elem, s) {
+        if (!elem || !s) return;
+        const online = !!s.online;
+        elem.className = "cam-status " + (online ? "cam-online" : "cam-offline");
+        elem.textContent = online ? "ONLINE" : "DISCONNECTED";
+      }
+
+      apply(baseStatus, data.base);
+      apply(wristStatus, data.wrist);
+    }
+
     async function fetchStatus() {
       try {
         const resp = await fetch("/api/status");
@@ -263,6 +301,17 @@
         updateStatusView(data);
       } catch (e) {
         console.error("Status poll failed:", e);
+      }
+    }
+
+    async function fetchCameraStatus() {
+      try {
+        const resp = await fetch("/api/camera-status");
+        if (!resp.ok) return;
+        const data = await resp.json();
+        updateCameraStatusView(data);
+      } catch (e) {
+        console.error("Camera status poll failed:", e);
       }
     }
 
@@ -282,7 +331,7 @@
       try {
         const resp = await fetch("/api/health");
         const data = await resp.json();
-        alert("Health check: " + data.status + (data.detail ? ("\\n" + data.detail) : ""));
+        alert("Health check: " + data.status + (data.detail ? ("\n" + data.detail) : ""));
       } catch (e) {
         alert("Health check failed: " + e);
       }
@@ -293,7 +342,9 @@
 
     // Poll status every 2 seconds
     fetchStatus();
+    fetchCameraStatus();
     setInterval(fetchStatus, 2000);
+    setInterval(fetchCameraStatus, 2000);
   </script>
 </body>
 </html>

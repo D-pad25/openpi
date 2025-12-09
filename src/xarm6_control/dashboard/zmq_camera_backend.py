@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Optional, Tuple, Generator
+from typing import Optional, Tuple, Generator, Dict, Any
 
 import cv2
 import numpy as np
@@ -17,7 +17,8 @@ class ZmqCameraBackend:
     Non-blocking backend that:
       - connects to a ZMQServerCamera via ZMQClientCamera,
       - runs a background thread to fetch frames at target_fps,
-      - stores the latest JPEG in memory.
+      - stores the latest JPEG in memory,
+      - tracks connection status and auto-reconnects.
     """
 
     def __init__(
@@ -27,24 +28,31 @@ class ZmqCameraBackend:
         img_size: Optional[Tuple[int, int]] = None,
         name: str = "camera",
         target_fps: float = 15.0,
+        stale_secs: float = 2.0,         # how old a frame can be before we call it "stale"
     ) -> None:
         self.host = host
         self.port = port
         self.img_size = img_size
         self.name = name
         self.target_fps = target_fps
+        self.stale_secs = stale_secs
 
         self._client = ZMQClientCamera(port=port, host=host)
 
         self._lock = threading.Lock()
         self._latest_jpeg: Optional[bytes] = None
-        self._last_update: float = 0.0  # 👈 track freshness
+        self._last_update: float = 0.0
 
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
 
-        self._consecutive_errors = 0              # 👈 error counter
-        self._max_errors_before_reset = 5         # 👈 tune as needed
+        self._consecutive_errors = 0
+        self._max_errors_before_reset = 5
+
+        # Status fields
+        self._connected: bool = False
+        self._last_error: Optional[str] = None
+        self._last_error_time: float = 0.0
 
     # ------------------------------------------------------------------
     # Thread lifecycle
@@ -67,23 +75,32 @@ class ZmqCameraBackend:
         self._stop_event.set()
 
     # ------------------------------------------------------------------
-    # Internal loop
+    # Internal helpers
     # ------------------------------------------------------------------
 
     def _reset_client(self) -> None:
         """Close and recreate the ZMQ client socket."""
         print(f"[ZmqCameraBackend:{self.name}] resetting ZMQ client...")
         try:
-            # If ZMQClientCamera has a close() method, call it.
             close_fn = getattr(self._client, "close", None)
             if callable(close_fn):
                 close_fn()
         except Exception as e:
             print(f"[ZmqCameraBackend:{self.name}] error closing client: {e}")
 
-        # Recreate client
         self._client = ZMQClientCamera(port=self.port, host=self.host)
         self._consecutive_errors = 0
+
+    def _mark_error(self, e: Exception) -> None:
+        with self._lock:
+            self._last_error = str(e)
+            self._last_error_time = time.time()
+            # When we hit an error, we pessimistically mark as disconnected.
+            self._connected = False
+
+    # ------------------------------------------------------------------
+    # Main polling loop
+    # ------------------------------------------------------------------
 
     def _run_loop(self) -> None:
         period = 1.0 / self.target_fps if self.target_fps > 0 else 0.0
@@ -107,16 +124,20 @@ class ZmqCameraBackend:
 
                 ok, jpeg = cv2.imencode(".jpg", bgr)
                 if ok:
+                    now = time.time()
                     with self._lock:
                         self._latest_jpeg = jpeg.tobytes()
-                        self._last_update = time.time()   # 👈 mark fresh
-                self._consecutive_errors = 0           # 👈 reset errors on success
+                        self._last_update = now
+                        self._connected = True
+                        self._last_error = None
+
+                self._consecutive_errors = 0
 
             except Exception as e:
                 self._consecutive_errors += 1
                 print(f"[ZmqCameraBackend:{self.name}] error #{self._consecutive_errors}: {e}")
+                self._mark_error(e)
 
-                # After a few consecutive errors, nuke and recreate the client
                 if self._consecutive_errors >= self._max_errors_before_reset:
                     self._reset_client()
 
@@ -127,7 +148,7 @@ class ZmqCameraBackend:
                     time.sleep(period - dt)
 
     # ------------------------------------------------------------------
-    # Public frame access
+    # Public frame + status access
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -146,13 +167,42 @@ class ZmqCameraBackend:
         with self._lock:
             jpeg = self._latest_jpeg
             last = self._last_update
+            connected = self._connected
 
-        # Consider frame "stale" if too old (e.g. > 2 seconds)
-        if jpeg is not None and last and (now - last) < 2.0:
+        # "Connected" only really means something if we also have a fresh frame.
+        if connected and jpeg is not None and last and (now - last) < self.stale_secs:
             return jpeg
 
         w, h = fallback_size
         return self._black_frame(width=w, height=h)
+
+    def get_status(self) -> Dict[str, Any]:
+        """
+        Return a snapshot of camera status for the API / UI.
+        """
+        now = time.time()
+        with self._lock:
+            last = self._last_update
+            last_error = self._last_error
+            last_error_time = self._last_error_time
+            consecutive_errors = self._consecutive_errors
+            connected = self._connected
+
+        stale = True
+        if last:
+            stale = (now - last) > self.stale_secs
+
+        # "online" == we think we're connected AND frames are not stale
+        online = bool(connected and not stale)
+
+        return {
+            "online": online,
+            "stale": stale,
+            "last_update": last,
+            "last_error": last_error,
+            "last_error_time": last_error_time,
+            "consecutive_errors": consecutive_errors,
+        }
 
 
 def mjpeg_stream_generator(

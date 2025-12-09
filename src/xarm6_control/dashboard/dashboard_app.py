@@ -220,6 +220,17 @@ def video_wrist() -> StreamingResponse:
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
+@app.get("/api/camera-status", response_class=JSONResponse)
+def api_camera_status() -> Dict[str, Any]:
+    """
+    Return status for each camera so the UI can show ONLINE / DISCONNECTED.
+    """
+    return {
+        "base": base_camera.get_status(),
+        "wrist": wrist_camera.get_status(),
+    }
+
+
 
 # ============================================================
 # Entrypoint
