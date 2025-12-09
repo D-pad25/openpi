@@ -542,7 +542,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        "xarm6_control.dashboard_app:app",
+        "xarm6_control.dashboard.dashboard_app:app",
         host="0.0.0.0",
         port=9000,
         reload=False,
