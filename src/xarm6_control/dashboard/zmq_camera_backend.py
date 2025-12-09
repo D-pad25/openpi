@@ -1,36 +1,4 @@
-#!/usr/bin/env python3
-"""
-Non-blocking ZMQ camera backend for the FastAPI dashboard.
-
-- Connects to ZMQServerCamera (REQ/REP) via ZMQClientCamera
-- Runs a background thread that polls frames at a target FPS
-- Keeps the latest frame as a JPEG in memory
-- Provides an MJPEG generator for FastAPI StreamingResponse
-
-Usage example (in dashboard_app.py):
-
-    from zmq_camera_backend import (
-        ZmqCameraBackend,
-        mjpeg_stream_generator,
-    )
-
-    base_backend = ZmqCameraBackend(host="127.0.0.1", port=5000, name="base")
-    wrist_backend = ZmqCameraBackend(host="127.0.0.1", port=5001, name="wrist")
-
-    @app.get("/video/base")
-    def video_base():
-        return StreamingResponse(
-            mjpeg_stream_generator(base_backend),
-            media_type="multipart/x-mixed-replace; boundary=frame",
-        )
-
-    @app.get("/video/wrist")
-    def video_wrist():
-        return StreamingResponse(
-            mjpeg_stream_generator(wrist_backend),
-            media_type="multipart/x-mixed-replace; boundary=frame",
-        )
-"""
+# xarm6_control/dashboard/zmq_camera_backend.py
 
 from __future__ import annotations
 
@@ -41,8 +9,8 @@ from typing import Optional, Tuple, Generator
 import cv2
 import numpy as np
 
-
 from xarm6_control.zmq_core.camera_node import ZMQClientCamera
+
 
 class ZmqCameraBackend:
     """
@@ -60,14 +28,6 @@ class ZmqCameraBackend:
         name: str = "camera",
         target_fps: float = 15.0,
     ) -> None:
-        """
-        Args:
-            host: ZMQ server host (where ZMQServerCamera is running).
-            port: ZMQ server port.
-            img_size: Optional (width, height) passed to camera.read(img_size).
-            name: For logging / debugging.
-            target_fps: How often to poll frames in the background thread.
-        """
         self.host = host
         self.port = port
         self.img_size = img_size
@@ -78,16 +38,19 @@ class ZmqCameraBackend:
 
         self._lock = threading.Lock()
         self._latest_jpeg: Optional[bytes] = None
+        self._last_update: float = 0.0  # 👈 track freshness
 
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
+
+        self._consecutive_errors = 0              # 👈 error counter
+        self._max_errors_before_reset = 5         # 👈 tune as needed
 
     # ------------------------------------------------------------------
     # Thread lifecycle
     # ------------------------------------------------------------------
 
     def start(self) -> None:
-        """Start the background capture thread (idempotent)."""
         if self._thread is not None and self._thread.is_alive():
             return
 
@@ -101,22 +64,33 @@ class ZmqCameraBackend:
         print(f"[ZmqCameraBackend:{self.name}] started (host={self.host}, port={self.port})")
 
     def stop(self) -> None:
-        """Signal the background thread to stop (non-blocking)."""
         self._stop_event.set()
-        # Do not join here to keep it non-blocking; it’s a daemon thread anyway.
 
     # ------------------------------------------------------------------
     # Internal loop
     # ------------------------------------------------------------------
 
+    def _reset_client(self) -> None:
+        """Close and recreate the ZMQ client socket."""
+        print(f"[ZmqCameraBackend:{self.name}] resetting ZMQ client...")
+        try:
+            # If ZMQClientCamera has a close() method, call it.
+            close_fn = getattr(self._client, "close", None)
+            if callable(close_fn):
+                close_fn()
+        except Exception as e:
+            print(f"[ZmqCameraBackend:{self.name}] error closing client: {e}")
+
+        # Recreate client
+        self._client = ZMQClientCamera(port=self.port, host=self.host)
+        self._consecutive_errors = 0
+
     def _run_loop(self) -> None:
-        """Background loop that pulls frames at approx target_fps."""
         period = 1.0 / self.target_fps if self.target_fps > 0 else 0.0
 
         while not self._stop_event.is_set():
             t0 = time.time()
             try:
-                # Your client: image, depth = camera.read()
                 image, depth = self._client.read(self.img_size)
 
                 if image is None:
@@ -126,9 +100,8 @@ class ZmqCameraBackend:
                 if image.dtype != np.uint8:
                     image = image.astype(np.uint8)
 
-                # Your other client does image[:, :, ::-1] => image is RGB here
                 if image.ndim == 3 and image.shape[2] == 3:
-                    bgr = image[:, :, ::-1]  # RGB -> BGR for OpenCV
+                    bgr = image[:, :, ::-1]  # RGB -> BGR
                 else:
                     bgr = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
 
@@ -136,10 +109,18 @@ class ZmqCameraBackend:
                 if ok:
                     with self._lock:
                         self._latest_jpeg = jpeg.tobytes()
-            except Exception as e:
-                print(f"[ZmqCameraBackend:{self.name}] error: {e}")
+                        self._last_update = time.time()   # 👈 mark fresh
+                self._consecutive_errors = 0           # 👈 reset errors on success
 
-            # Simple FPS pacing
+            except Exception as e:
+                self._consecutive_errors += 1
+                print(f"[ZmqCameraBackend:{self.name}] error #{self._consecutive_errors}: {e}")
+
+                # After a few consecutive errors, nuke and recreate the client
+                if self._consecutive_errors >= self._max_errors_before_reset:
+                    self._reset_client()
+
+            # FPS pacing
             if period > 0:
                 dt = time.time() - t0
                 if dt < period:
@@ -159,13 +140,15 @@ class ZmqCameraBackend:
 
     def get_latest_jpeg(self, fallback_size: Tuple[int, int] = (640, 480)) -> bytes:
         """
-        Return the latest JPEG frame if available, otherwise a black frame.
-        Non-blocking.
+        Return the latest JPEG frame if available and recent, otherwise a black frame.
         """
+        now = time.time()
         with self._lock:
             jpeg = self._latest_jpeg
+            last = self._last_update
 
-        if jpeg is not None:
+        # Consider frame "stale" if too old (e.g. > 2 seconds)
+        if jpeg is not None and last and (now - last) < 2.0:
             return jpeg
 
         w, h = fallback_size
@@ -177,14 +160,6 @@ def mjpeg_stream_generator(
     boundary: bytes = b"--frame",
     fallback_size: Tuple[int, int] = (640, 480),
 ) -> Generator[bytes, None, None]:
-    """
-    Generator suitable for FastAPI StreamingResponse with
-    media_type="multipart/x-mixed-replace; boundary=frame".
-
-    It:
-      - ensures the backend thread is started,
-      - repeatedly yields the most recent JPEG frame.
-    """
     backend.start()  # idempotent
 
     while True:
