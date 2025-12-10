@@ -45,7 +45,7 @@ from xarm6_control.dashboard.zmq_camera_backend import (
 # ============================================================
 # DEFINES
 # ============================================================
-REPO_ROOT = Path.home() / "openpi"
+REPO_ROOT = Path.home() / "Thesis/openpi"
 PIPELINE_SCRIPT = REPO_ROOT / "src/xarm6_control/xarm_pipeline.sh"
 
 # ============================================================
