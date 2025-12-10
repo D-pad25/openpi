@@ -294,7 +294,18 @@
 
       apply(baseStatus, data.base);
       apply(wristStatus, data.wrist);
+
+      // New: reflect camera *server* status in the button
+      const serverRunning = !!data.server_running;
+      if (serverRunning) {
+        camBtn.disabled = true;
+        camBtn.textContent = "📷 Camera Server Running";
+      } else {
+        camBtn.disabled = false;
+        camBtn.textContent = "📷 Start Camera Server";
+      }
     }
+
 
     async function fetchStatus() {
       try {
@@ -341,26 +352,26 @@
     }
     
     async function startCameraServer() {
-    camBtn.disabled = true;
-    camBtn.textContent = "Starting cameras...";
+      camBtn.disabled = true;
+      camBtn.textContent = "Starting cameras...";
 
-    try {
-      const resp = await fetch("/api/start-cameras", { method: "POST" });
-      if (!resp.ok) {
-        const text = await resp.text();
-        alert("Failed to start camera server: " + text);
-      } else {
-        const data = await resp.json();
-        // Optional: show a friendly message; you can also skip the alert.
-        alert("Camera server: " + (data.status || "started"));
+      try {
+        const resp = await fetch("/api/start-cameras", { method: "POST" });
+        if (!resp.ok) {
+          const text = await resp.text();
+          alert("Failed to start camera server: " + text);
+        } else {
+          const data = await resp.json();
+          alert("Camera server: " + (data.status || "started"));
+        }
+      } catch (e) {
+        alert("Error starting camera server: " + e);
+      } finally {
+        // Instead of blindly resetting text, ask backend what the state is now
+        fetchCameraStatus();
       }
-    } catch (e) {
-      alert("Error starting camera server: " + e);
-    } finally {
-      camBtn.disabled = false;
-      camBtn.textContent = "📷 Start Camera Server";
     }
-  }
+
 
     runBtn.addEventListener("click", runServer);
     healthBtn.addEventListener("click", runHealthCheck);

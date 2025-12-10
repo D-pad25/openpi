@@ -277,9 +277,17 @@ def video_wrist() -> StreamingResponse:
 @app.get("/api/camera-status", response_class=JSONResponse)
 def api_camera_status() -> Dict[str, Any]:
     """
-    Return status for each camera so the UI can show ONLINE / DISCONNECTED.
+    Return status for each camera so the UI can show ONLINE / DISCONNECTED,
+    plus whether the camera *server* process is running.
     """
+    with _camera_server_lock:
+        server_running = (
+            _camera_server_process is not None
+            and _camera_server_process.poll() is None  # None => still running
+        )
+
     return {
+        "server_running": server_running,
         "base": base_camera.get_status(),
         "wrist": wrist_camera.get_status(),
     }
