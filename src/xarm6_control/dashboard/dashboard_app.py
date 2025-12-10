@@ -225,6 +225,8 @@ def api_start_cameras() -> Dict[str, Any]:
 
     Uses the same path, venv activation, and uv run command as your CLI.
     If it's already running, return 409.
+    If the script exits immediately with an error (e.g. no RealSense devices),
+    return 500 with the captured output so the UI can show it.
     """
     global _camera_server_process
 
@@ -242,13 +244,16 @@ def api_start_cameras() -> Dict[str, Any]:
                 detail="Camera server already running.",
             )
 
-        # Run: ./xarm_pipeline.sh cameras
         cmd = ["bash", str(PIPELINE_SCRIPT), "cameras"]
 
         try:
-            _camera_server_process = subprocess.Popen(
+            # Capture stdout+stderr so we can show errors if it dies immediately
+            proc = subprocess.Popen(
                 cmd,
-                cwd=str(REPO_ROOT),  # makes relative paths in the script behave
+                cwd=str(REPO_ROOT),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
             )
         except Exception as e:
             raise HTTPException(
@@ -256,7 +261,26 @@ def api_start_cameras() -> Dict[str, Any]:
                 detail=f"Failed to start camera server: {e}",
             )
 
+        # Give it a moment to start up; if it dies immediately, treat as failure.
+        time.sleep(2.0)
+        ret = proc.poll()
+        if ret is not None and ret != 0:
+            # Process exited quickly with error – grab its output
+            try:
+                output, _ = proc.communicate(timeout=1.0)
+            except Exception:
+                output = "<no output captured>"
+
+            raise HTTPException(
+                status_code=500,
+                detail=f"Camera server exited early with code {ret}:\n{output}",
+            )
+
+        # Otherwise assume it's running in the background
+        _camera_server_process = proc
+
     return {"status": "started"}
+
 
 
 @app.get("/video/base")

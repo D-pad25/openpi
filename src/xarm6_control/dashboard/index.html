@@ -359,7 +359,14 @@
         const resp = await fetch("/api/start-cameras", { method: "POST" });
         if (!resp.ok) {
           const text = await resp.text();
-          alert("Failed to start camera server: " + text);
+          let msg = text;
+          try {
+            const parsed = JSON.parse(text);
+            if (parsed.detail) msg = parsed.detail;
+          } catch (_) {
+            // ignore JSON parse error, fall back to raw text
+          }
+          alert("Failed to start camera server:\n\n" + msg);
         } else {
           const data = await resp.json();
           alert("Camera server: " + (data.status || "started"));
@@ -367,10 +374,12 @@
       } catch (e) {
         alert("Error starting camera server: " + e);
       } finally {
-        // Instead of blindly resetting text, ask backend what the state is now
-        fetchCameraStatus();
+        // Button state will also be updated by /api/camera-status polling
+        camBtn.disabled = false;
+        camBtn.textContent = "📷 Start Camera Server";
       }
     }
+
 
 
     runBtn.addEventListener("click", runServer);
