@@ -14,7 +14,7 @@ HPC_HOST="aqua.qut.edu.au"
 HPC_REPO_DIR="/home/n10813934/gitRepos/openpi"   # path to repo on HPC
 
 # Local machine repo path (where xarm6_control lives)
-LOCAL_REPO_DIR="$HOME/openpi"           # adjust to e.g. "$HOME/Thesis/openpi" if needed
+LOCAL_REPO_DIR="$HOME/Thesis/openpi"           # adjust to e.g. "$HOME/Thesis/openpi" if needed
 
 # Dataset paths (on HPC)
 DATA_DIR="/home/n10813934/data/tfds_datasets"
