@@ -172,6 +172,7 @@
     <div>
       <button id="run-btn" class="primary">▶ Run Policy Server</button>
       <button id="health-btn" class="secondary" style="margin-left: 8px;">❤️ Check Health</button>
+      <button id="cam-btn" class="secondary" style="margin-left: 8px;">📷 Start Camera Server</button>
     </div>
   </header>
 
@@ -229,6 +230,8 @@
     const lastMessage = document.getElementById("last-message");
     const runBtn = document.getElementById("run-btn");
     const healthBtn = document.getElementById("health-btn");
+    const camBtn = document.getElementById("cam-btn");
+
 
     const baseStatus = document.getElementById("base-status");
     const wristStatus = document.getElementById("wrist-status");
@@ -336,9 +339,32 @@
         alert("Health check failed: " + e);
       }
     }
+    
+    async function startCameraServer() {
+    camBtn.disabled = true;
+    camBtn.textContent = "Starting cameras...";
+
+    try {
+      const resp = await fetch("/api/start-cameras", { method: "POST" });
+      if (!resp.ok) {
+        const text = await resp.text();
+        alert("Failed to start camera server: " + text);
+      } else {
+        const data = await resp.json();
+        // Optional: show a friendly message; you can also skip the alert.
+        alert("Camera server: " + (data.status || "started"));
+      }
+    } catch (e) {
+      alert("Error starting camera server: " + e);
+    } finally {
+      camBtn.disabled = false;
+      camBtn.textContent = "📷 Start Camera Server";
+    }
+  }
 
     runBtn.addEventListener("click", runServer);
     healthBtn.addEventListener("click", runHealthCheck);
+    camBtn.addEventListener("click", startCameraServer);
 
     // Poll status every 2 seconds
     fetchStatus();

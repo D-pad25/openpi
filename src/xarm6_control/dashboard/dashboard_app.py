@@ -20,6 +20,7 @@ import threading
 import time
 from typing import Optional, Dict, Any, Generator
 
+import subprocess
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import (
@@ -42,17 +43,29 @@ from xarm6_control.dashboard.zmq_camera_backend import (
 )
 
 # ============================================================
+# DEFINES
+# ============================================================
+REPO_ROOT = Path.home() / "openpi"
+PIPELINE_SCRIPT = REPO_ROOT / "xarm_pipeline.sh"
+
+# ============================================================
 # Global orchestrator + thread + status storage
 # ============================================================
 
 app = FastAPI(title="XArm6 Demo Dashboard")
 
-
+# Global status storage
 _status_lock = threading.Lock()
 _last_status: Dict[str, Any] = {
     "state": OrchestratorState.IDLE.value,
     "message": "Idle",
 }
+
+# Global camera server process (if any)
+_camera_server_lock = threading.Lock()
+_camera_server_process: Optional[subprocess.Popen] = None
+
+
 
 _orchestrator: Optional[Orchestrator] = None
 _orch_thread: Optional[threading.Thread] = None
@@ -203,6 +216,47 @@ def api_health() -> Dict[str, Any]:
         return {"status": "healthy", "detail": orch.last_message}
     else:
         return {"status": "unhealthy", "detail": orch.last_message}
+
+
+@app.post("/api/start-cameras", response_class=JSONResponse)
+def api_start_cameras() -> Dict[str, Any]:
+    """
+    Start the local camera nodes via xarm_pipeline.sh cameras.
+
+    Uses the same path, venv activation, and uv run command as your CLI.
+    If it's already running, return 409.
+    """
+    global _camera_server_process
+
+    if not PIPELINE_SCRIPT.exists():
+        raise HTTPException(
+            status_code=500,
+            detail=f"Pipeline script not found at {PIPELINE_SCRIPT}",
+        )
+
+    with _camera_server_lock:
+        # If process exists and is still running, don't start another
+        if _camera_server_process is not None and _camera_server_process.poll() is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Camera server already running.",
+            )
+
+        # Run: ./xarm_pipeline.sh cameras
+        cmd = ["bash", str(PIPELINE_SCRIPT), "cameras"]
+
+        try:
+            _camera_server_process = subprocess.Popen(
+                cmd,
+                cwd=str(REPO_ROOT),  # makes relative paths in the script behave
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to start camera server: {e}",
+            )
+
+    return {"status": "started"}
 
 
 @app.get("/video/base")
