@@ -223,15 +223,52 @@
       color: #9ca3af;
       margin-bottom: 4px;
     }
+
+    .mode-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      font-size: 0.8rem;
+    }
+    .mode-toggle span.label {
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.7rem;
+      color: #9ca3af;
+    }
+    .mode-toggle label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .mode-toggle input[type="radio"] {
+      accent-color: #22c55e;
+    }
   </style>
 </head>
 <body>
   <header>
     <h1>XArm6 Policy Server Dashboard</h1>
-    <div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <div class="mode-toggle">
+        <span class="label">Mode</span>
+        <label>
+          <input type="radio" name="server-mode" value="local">
+          Local
+        </label>
+        <label>
+          <input type="radio" name="server-mode" value="hpc" checked>
+          HPC
+        </label>
+      </div>
       <button id="run-btn" class="primary">▶ Run Policy Server</button>
-      <button id="health-btn" class="secondary" style="margin-left: 8px;">❤️ Check Health</button>
-      <button id="cam-btn" class="secondary" style="margin-left: 8px;">📷 Start Camera Server</button>
+      <button id="health-btn" class="secondary">❤️ Check Health</button>
+      <button id="cam-btn" class="secondary">📷 Start Camera Server</button>
     </div>
   </header>
 
@@ -329,12 +366,19 @@
         ? `${data.remote_ip}:${data.remote_port}`
         : "—";
       const serverRunning = !!data.server_running;
+      const mode = (data.server_mode || "hpc").toLowerCase();
 
-      statusText.textContent = state;
+      // Status text – include mode when running
+      statusText.textContent = serverRunning
+        ? `${state} (${mode.toUpperCase()})`
+        : state;
+
       lastMessage.textContent = msg;
       metaJob.textContent = `Job: ${jobId}`;
       metaRemote.textContent = `Remote: ${remote}`;
-      metaServer.textContent = `Server: ${serverRunning ? "RUNNING" : "NOT RUNNING"}`;
+      metaServer.textContent = serverRunning
+        ? `Server: RUNNING (${mode.toUpperCase()})`
+        : "Server: NOT RUNNING";
 
       statusDot.className = "status-dot";
       if (state === "READY") {
@@ -357,9 +401,18 @@
         "CHECKING_POLICY_HEALTH",
       ];
 
-      if (state === "READY") {
+      // Sync the radio buttons with backend mode
+      const radios = document.querySelectorAll('input[name="server-mode"]');
+      radios.forEach(r => {
+        if (r.value === mode) r.checked = true;
+      });
+
+      // Button state
+      if (serverRunning) {
         runBtn.disabled = true;
-        runBtn.textContent = "Server running";
+        runBtn.textContent = mode === "local"
+          ? "Local server running"
+          : "Server running";
       } else if (busyStates.includes(state)) {
         runBtn.disabled = true;
         runBtn.textContent = "Running...";
@@ -455,8 +508,15 @@
     }
 
     async function runServer() {
+      const selected = document.querySelector('input[name="server-mode"]:checked');
+      const mode = selected ? selected.value : "hpc";
+
       try {
-        const resp = await fetch("/api/run-server", { method: "POST" });
+        const resp = await fetch("/api/run-server", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode }),
+        });
         if (!resp.ok) {
           const text = await resp.text();
           alert("Failed to start server: " + text);
@@ -523,8 +583,6 @@
         }
       } catch (e) {
         alert("Error starting xArm client: " + e);
-      } finally {
-        // buttons will be updated by status polling
       }
     }
 
@@ -543,8 +601,6 @@
         }
       } catch (e) {
         alert("Error stopping xArm client: " + e);
-      } finally {
-        // status polling will refresh view
       }
     }
 

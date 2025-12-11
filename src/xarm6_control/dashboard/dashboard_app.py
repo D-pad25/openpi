@@ -20,6 +20,7 @@ from __future__ import annotations
 import threading
 import time
 from typing import Optional, Dict, Any, Generator, List
+from enum import Enum
 
 import subprocess
 from pathlib import Path
@@ -62,6 +63,13 @@ DEFAULT_XARM_PROMPT = (
 )
 XARM_PORT = "8000"
 
+
+class ServerMode(str, Enum):
+    """Where the policy server is running."""
+    HPC = "hpc"
+    LOCAL = "local"
+
+
 # ============================================================
 # Global orchestrator + thread + status storage
 # ============================================================
@@ -73,7 +81,11 @@ _status_lock = threading.Lock()
 _last_status: Dict[str, Any] = {
     "state": OrchestratorState.IDLE.value,
     "message": "Idle",
+    "server_mode": ServerMode.HPC.value,  # default to HPC
 }
+
+# Track which mode we're in for the policy server
+_server_mode: ServerMode = ServerMode.HPC
 
 # Global camera server process (if any)
 _camera_server_lock = threading.Lock()
@@ -83,6 +95,10 @@ _camera_server_process: Optional[subprocess.Popen] = None
 _orchestrator: Optional[Orchestrator] = None
 _orch_thread: Optional[threading.Thread] = None
 _orch_thread_lock = threading.Lock()
+
+# Local policy server process (if any)
+_local_server_lock = threading.Lock()
+_local_server_process: Optional[subprocess.Popen] = None
 
 # ============================================================
 # xArm client process + log
@@ -122,8 +138,13 @@ class RunXarmRequest(BaseModel):
     prompt: Optional[str] = None
 
 
+class RunServerRequest(BaseModel):
+    """Request body for choosing where to start the policy server."""
+    mode: ServerMode = ServerMode.HPC
+
+
 # ============================================================
-# Orchestrator helpers
+# Orchestrator + server helpers
 # ============================================================
 
 def _on_state_change(state: OrchestratorState, message: str) -> None:
@@ -131,7 +152,8 @@ def _on_state_change(state: OrchestratorState, message: str) -> None:
     with _status_lock:
         _last_status["state"] = state.value
         _last_status["message"] = message
-    print(f"[DASHBOARD] {state.value}: {message}")
+        _last_status["server_mode"] = ServerMode.HPC.value
+    print(f"[DASHBOARD][HPC] {state.value}: {message}")
 
 
 def _start_orchestrator_thread() -> bool:
@@ -170,6 +192,62 @@ def _start_orchestrator_thread() -> bool:
         _orch_thread = t
         t.start()
         return True
+
+
+def _local_server_running() -> bool:
+    """Return True if the local policy server subprocess is alive."""
+    with _local_server_lock:
+        return _local_server_process is not None and _local_server_process.poll() is None
+
+
+def _any_server_running() -> bool:
+    """Return True if an HPC orchestration/server or local server is active."""
+    # HPC orchestration thread in progress?
+    with _orch_thread_lock:
+        hpc_thread_alive = _orch_thread is not None and _orch_thread.is_alive()
+
+    orch = _orchestrator
+    hpc_ready = orch is not None and orch.state == OrchestratorState.READY
+    local_ready = _local_server_running()
+
+    return hpc_thread_alive or hpc_ready or local_ready
+
+
+def _start_local_policy_server() -> None:
+    """
+    Start the policy server locally (no HPC).
+    Raises RuntimeError if already running or can't start.
+    """
+    global _local_server_process
+
+    with _local_server_lock:
+        if _local_server_process is not None and _local_server_process.poll() is None:
+            raise RuntimeError("Local policy server is already running.")
+
+        cmd = [
+            "uv",
+            "run",
+            "scripts/serve_policy.py",
+            "--env",
+            "DEMO",
+            "--port",
+            XARM_PORT,
+        ]
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=str(OPENPI_ROOT),
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to start local policy server: {e}") from e
+
+        _local_server_process = proc
+
+    # Optimistically mark READY; /api/status will downgrade if it dies
+    with _status_lock:
+        _last_status["state"] = OrchestratorState.READY.value
+        _last_status["message"] = f"Local policy server running on localhost:{XARM_PORT}"
+        _last_status["server_mode"] = ServerMode.LOCAL.value
 
 
 # ============================================================
@@ -215,18 +293,40 @@ def index() -> str:
 def api_status() -> Dict[str, Any]:
     """
     Return latest orchestrator state + message + job/remote info.
-    Also expose a simple server_running flag for the UI.
+    Also expose a simple server_running flag for the UI and which mode is active.
     """
     with _status_lock:
         state = _last_status["state"]
         message = _last_status["message"]
+        server_mode = _last_status.get("server_mode", ServerMode.HPC.value)
 
     orch = _orchestrator
     job_id = orch.job_id if orch is not None else None
     remote_ip = orch.remote_ip if orch is not None else None
     remote_port = orch.remote_port if orch is not None else None
 
-    server_running = state == OrchestratorState.READY.value
+    # If we're in local mode, tunnel/job info isn't meaningful
+    if server_mode == ServerMode.LOCAL.value:
+        job_id = None
+        remote_ip = None
+        remote_port = None
+
+    hpc_ready = orch is not None and orch.state == OrchestratorState.READY
+    local_ready = _local_server_running()
+
+    # If we *thought* local was READY but the process is gone, reset to IDLE
+    if (
+        server_mode == ServerMode.LOCAL.value
+        and state == OrchestratorState.READY.value
+        and not local_ready
+    ):
+        with _status_lock:
+            _last_status["state"] = OrchestratorState.IDLE.value
+            _last_status["message"] = "Local policy server is not running."
+            state = _last_status["state"]
+            message = _last_status["message"]
+
+    server_running = hpc_ready or local_ready
 
     return {
         "state": state,
@@ -235,34 +335,59 @@ def api_status() -> Dict[str, Any]:
         "remote_ip": remote_ip,
         "remote_port": remote_port,
         "server_running": server_running,
+        "server_mode": server_mode,
+        "hpc_running": hpc_ready,
+        "local_running": local_ready,
     }
 
 
 @app.post("/api/run-server", response_class=JSONResponse)
-def api_run_server() -> Dict[str, Any]:
+def api_run_server(req: RunServerRequest) -> Dict[str, Any]:
     """
-    Start the orchestrator sequence in a background thread.
+    Start the policy server either via HPC orchestrator or locally,
+    depending on the requested mode.
 
-    Prevents starting a second sequence if the server/job is already running/busy.
+    Prevents starting a second sequence if a server/job is already running/busy.
     """
-    started = _start_orchestrator_thread()
-    if not started:
+    global _server_mode
+
+    # Don't start if anything is already active
+    if _any_server_running():
         raise HTTPException(
             status_code=409,
-            detail="Server orchestration already running or server already READY.",
+            detail="Policy server already running (HPC or local).",
         )
 
-    with _status_lock:
-        _last_status["state"] = OrchestratorState.SUBMITTING_JOB.value
-        _last_status["message"] = "Submitting policy server job..."
+    if req.mode == ServerMode.HPC:
+        started = _start_orchestrator_thread()
+        if not started:
+            raise HTTPException(
+                status_code=409,
+                detail="Server orchestration already running or server already READY.",
+            )
 
-    return {"status": "started"}
+        with _status_lock:
+            _last_status["state"] = OrchestratorState.SUBMITTING_JOB.value
+            _last_status["message"] = "Submitting policy server job..."
+            _last_status["server_mode"] = ServerMode.HPC.value
+        _server_mode = ServerMode.HPC
+    else:
+        try:
+            _start_local_policy_server()
+        except RuntimeError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=str(e),
+            )
+        _server_mode = ServerMode.LOCAL
+
+    return {"status": "started", "mode": req.mode.value}
 
 
 @app.get("/api/health", response_class=JSONResponse)
 def api_health() -> Dict[str, Any]:
     """
-    Trigger an explicit health check using the orchestrator's method.
+    Trigger an explicit health check using the orchestrator's method (HPC mode only).
     """
     orch = _orchestrator
     if orch is None:
