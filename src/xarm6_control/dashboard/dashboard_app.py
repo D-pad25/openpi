@@ -223,10 +223,8 @@ def api_start_cameras() -> Dict[str, Any]:
     """
     Start the local camera nodes via xarm_pipeline.sh cameras.
 
-    Uses the same path, venv activation, and uv run command as your CLI.
-    If it's already running, return 409.
     If the script exits immediately with an error (e.g. no RealSense devices),
-    return 500 with the captured output so the UI can show it.
+    capture its output and return it as an HTTP 500 so the UI can show it.
     """
     global _camera_server_process
 
@@ -247,7 +245,7 @@ def api_start_cameras() -> Dict[str, Any]:
         cmd = ["bash", str(PIPELINE_SCRIPT), "cameras"]
 
         try:
-            # Capture stdout+stderr so we can show errors if it dies immediately
+            # Capture stdout+stderr so we can surface errors if it dies quickly
             proc = subprocess.Popen(
                 cmd,
                 cwd=str(REPO_ROOT),
@@ -261,11 +259,11 @@ def api_start_cameras() -> Dict[str, Any]:
                 detail=f"Failed to start camera server: {e}",
             )
 
-        # Give it a moment to start up; if it dies immediately, treat as failure.
-        time.sleep(2.0)
+        # Give the script a short window to either stay alive or fail fast
+        time.sleep(3.0)
         ret = proc.poll()
         if ret is not None and ret != 0:
-            # Process exited quickly with error – grab its output
+            # Process exited with error – grab its output for debugging
             try:
                 output, _ = proc.communicate(timeout=1.0)
             except Exception:
@@ -280,6 +278,7 @@ def api_start_cameras() -> Dict[str, Any]:
         _camera_server_process = proc
 
     return {"status": "started"}
+
 
 
 

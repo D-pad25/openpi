@@ -364,7 +364,7 @@
             const parsed = JSON.parse(text);
             if (parsed.detail) msg = parsed.detail;
           } catch (_) {
-            // ignore JSON parse error, fall back to raw text
+            // ignore JSON parse failure, fall back to raw text
           }
           alert("Failed to start camera server:\n\n" + msg);
         } else {
@@ -374,11 +374,11 @@
       } catch (e) {
         alert("Error starting camera server: " + e);
       } finally {
-        // Button state will also be updated by /api/camera-status polling
         camBtn.disabled = false;
         camBtn.textContent = "📷 Start Camera Server";
       }
     }
+
 
 
 
