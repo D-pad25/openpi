@@ -120,7 +120,8 @@ def _start_orchestrator_thread() -> bool:
 
 # Create shared backends (one per camera)
 base_camera = ZmqCameraBackend(
-    host="172.23.224.1",
+    # host="172.23.224.1",
+    host="0.0.0.0",
     port=5000,
     img_size=None,   # or (640, 480) if you want to downsample
     name="base",
@@ -128,7 +129,7 @@ base_camera = ZmqCameraBackend(
 )
 
 wrist_camera = ZmqCameraBackend(
-    host="172.23.224.1",
+    host="0.0.0.0",
     port=5001,
     img_size=None,
     name="wrist",
