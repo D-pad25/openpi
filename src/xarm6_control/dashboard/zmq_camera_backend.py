@@ -135,7 +135,7 @@ class ZmqCameraBackend:
 
             except Exception as e:
                 self._consecutive_errors += 1
-                print(f"[ZmqCameraBackend:{self.name}] error #{self._consecutive_errors}: {e}")
+                # print(f"[ZmqCameraBackend:{self.name}] error #{self._consecutive_errors}: {e}")
                 self._mark_error(e)
 
                 if self._consecutive_errors >= self._max_errors_before_reset:
