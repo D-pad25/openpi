@@ -30,7 +30,7 @@
       flex: 1;
       padding: 16px 24px 24px;
       display: grid;
-      grid-template-columns: 2fr 1.2fr;
+      grid-template-columns: 2fr 1.3fr;
       grid-gap: 16px;
     }
     .card {
@@ -164,6 +164,65 @@
       background: #450a0a;
       color: #fecaca;
     }
+
+    .right-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .xarm-controls label {
+      display: block;
+      font-size: 0.8rem;
+      margin-bottom: 4px;
+      color: #9ca3af;
+    }
+    #xarm-prompt {
+      width: 100%;
+      min-height: 60px;
+      resize: vertical;
+      border-radius: 8px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      color: #e5e7eb;
+      padding: 6px 8px;
+      font-size: 0.85rem;
+      font-family: inherit;
+    }
+    .xarm-buttons {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      margin-bottom: 8px;
+    }
+    .xarm-status-pill {
+      font-size: 0.75rem;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+    }
+    .xarm-status-idle {
+      background: #111827;
+      color: #e5e7eb;
+    }
+    .xarm-status-running {
+      background: #14532d;
+      color: #bbf7d0;
+    }
+    .xarm-status-ok {
+      background: #0f766e;
+      color: #a5f3fc;
+    }
+    .xarm-status-error {
+      background: #450a0a;
+      color: #fecaca;
+    }
+    .xarm-log-header {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      margin-bottom: 4px;
+    }
   </style>
 </head>
 <body>
@@ -177,6 +236,7 @@
   </header>
 
   <main>
+    <!-- Left: cameras -->
     <section class="card">
       <h2>Camera Feeds</h2>
       <div class="cams-grid">
@@ -197,28 +257,48 @@
       </div>
     </section>
 
-    <section class="card">
-      <h2>Server & Tunnel Status</h2>
-      <div id="status-chip" class="status-chip">
-        <div id="status-dot" class="status-dot status-idle"></div>
-        <span id="status-text">IDLE</span>
-      </div>
+    <!-- Right: server + xArm client stacked -->
+    <div class="right-col">
+      <section class="card">
+        <h2>Server & Tunnel Status</h2>
+        <div id="status-chip" class="status-chip">
+          <div id="status-dot" class="status-dot status-idle"></div>
+          <span id="status-text">IDLE</span>
+        </div>
 
-      <div class="meta-row">
-        <span id="meta-job">Job: —</span>
-        <span id="meta-remote">Remote: —</span>
-        <span id="meta-server">Server: NOT RUNNING</span>
-      </div>
+        <div class="meta-row">
+          <span id="meta-job">Job: —</span>
+          <span id="meta-remote">Remote: —</span>
+          <span id="meta-server">Server: NOT RUNNING</span>
+        </div>
 
-      <div style="margin-top: 8px; font-size: 0.8rem; color: #9ca3af;">
-        <strong>Last message:</strong>
-      </div>
-      <div id="last-message" class="log"></div>
-    </section>
+        <div style="margin-top: 8px; font-size: 0.8rem; color: #9ca3af;">
+          <strong>Last message:</strong>
+        </div>
+        <div id="last-message" class="log"></div>
+      </section>
+
+      <section class="card">
+        <h2>xArm Client</h2>
+        <div class="xarm-controls">
+          <label for="xarm-prompt">Prompt</label>
+          <textarea id="xarm-prompt">Pick a ripe, red tomato and drop it in the blue bucket. [crop=tomato]</textarea>
+        </div>
+
+        <div class="xarm-buttons">
+          <button id="xarm-run-btn" class="primary">▶ Run xArm Client</button>
+          <button id="xarm-stop-btn" class="secondary" disabled>⏹ Stop</button>
+          <span id="xarm-status-label" class="xarm-status-pill xarm-status-idle">IDLE</span>
+        </div>
+
+        <div class="xarm-log-header">Client log</div>
+        <pre id="xarm-log" class="log"></pre>
+      </section>
+    </div>
   </main>
 
   <footer>
-    XArm6 demo • Orchestrator-backed • MJPEG cameras
+    XArm6 demo • Orchestrator-backed • MJPEG cameras • xArm client
   </footer>
 
   <script>
@@ -232,9 +312,14 @@
     const healthBtn = document.getElementById("health-btn");
     const camBtn = document.getElementById("cam-btn");
 
-
     const baseStatus = document.getElementById("base-status");
     const wristStatus = document.getElementById("wrist-status");
+
+    const xarmRunBtn = document.getElementById("xarm-run-btn");
+    const xarmStopBtn = document.getElementById("xarm-stop-btn");
+    const xarmPromptInput = document.getElementById("xarm-prompt");
+    const xarmStatusLabel = document.getElementById("xarm-status-label");
+    const xarmLogElem = document.getElementById("xarm-log");
 
     function updateStatusView(data) {
       const state = (data.state || "IDLE").toUpperCase();
@@ -295,7 +380,6 @@
       apply(baseStatus, data.base);
       apply(wristStatus, data.wrist);
 
-      // New: reflect camera *server* status in the button
       const serverRunning = !!data.server_running;
       if (serverRunning) {
         camBtn.disabled = true;
@@ -306,6 +390,36 @@
       }
     }
 
+    function updateXarmView(data) {
+      const running = !!data.running;
+      const rc = data.returncode;
+      const log = data.log || "";
+
+      xarmLogElem.textContent = log;
+
+      if (running) {
+        xarmStatusLabel.textContent = "RUNNING";
+        xarmStatusLabel.className = "xarm-status-pill xarm-status-running";
+        xarmRunBtn.disabled = true;
+        xarmStopBtn.disabled = false;
+      } else {
+        let label = "IDLE";
+        let cls = "xarm-status-pill ";
+        if (rc === null || typeof rc === "undefined") {
+          cls += "xarm-status-idle";
+        } else if (rc === 0) {
+          label = "FINISHED";
+          cls += "xarm-status-ok";
+        } else {
+          label = "ERROR (" + rc + ")";
+          cls += "xarm-status-error";
+        }
+        xarmStatusLabel.textContent = label;
+        xarmStatusLabel.className = cls;
+        xarmRunBtn.disabled = false;
+        xarmStopBtn.disabled = true;
+      }
+    }
 
     async function fetchStatus() {
       try {
@@ -326,6 +440,17 @@
         updateCameraStatusView(data);
       } catch (e) {
         console.error("Camera status poll failed:", e);
+      }
+    }
+
+    async function fetchXarmStatus() {
+      try {
+        const resp = await fetch("/api/xarm-status");
+        if (!resp.ok) return;
+        const data = await resp.json();
+        updateXarmView(data);
+      } catch (e) {
+        console.error("xArm status poll failed:", e);
       }
     }
 
@@ -350,7 +475,7 @@
         alert("Health check failed: " + e);
       }
     }
-    
+
     async function startCameraServer() {
       camBtn.disabled = true;
       camBtn.textContent = "Starting cameras...";
@@ -363,9 +488,7 @@
           try {
             const parsed = JSON.parse(text);
             if (parsed.detail) msg = parsed.detail;
-          } catch (_) {
-            // ignore JSON parse failure, fall back to raw text
-          }
+          } catch (_) {}
           alert("Failed to start camera server:\n\n" + msg);
         } else {
           const data = await resp.json();
@@ -374,23 +497,70 @@
       } catch (e) {
         alert("Error starting camera server: " + e);
       } finally {
-        camBtn.disabled = false;
+        // actual running state will be picked up by polling
         camBtn.textContent = "📷 Start Camera Server";
       }
     }
 
+    async function runXarm() {
+      xarmRunBtn.disabled = true;
+      const prompt = xarmPromptInput ? xarmPromptInput.value : "";
 
+      try {
+        const resp = await fetch("/api/run-xarm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        });
+        if (!resp.ok) {
+          const text = await resp.text();
+          let msg = text;
+          try {
+            const parsed = JSON.parse(text);
+            if (parsed.detail) msg = parsed.detail;
+          } catch (_) {}
+          alert("Failed to start xArm client:\n\n" + msg);
+        }
+      } catch (e) {
+        alert("Error starting xArm client: " + e);
+      } finally {
+        // buttons will be updated by status polling
+      }
+    }
 
+    async function stopXarm() {
+      xarmStopBtn.disabled = true;
+      try {
+        const resp = await fetch("/api/stop-xarm", { method: "POST" });
+        if (!resp.ok) {
+          const text = await resp.text();
+          let msg = text;
+          try {
+            const parsed = JSON.parse(text);
+            if (parsed.detail) msg = parsed.detail;
+          } catch (_) {}
+          alert("Failed to stop xArm client:\n\n" + msg);
+        }
+      } catch (e) {
+        alert("Error stopping xArm client: " + e);
+      } finally {
+        // status polling will refresh view
+      }
+    }
 
     runBtn.addEventListener("click", runServer);
     healthBtn.addEventListener("click", runHealthCheck);
     camBtn.addEventListener("click", startCameraServer);
+    xarmRunBtn.addEventListener("click", runXarm);
+    xarmStopBtn.addEventListener("click", stopXarm);
 
     // Poll status every 2 seconds
     fetchStatus();
     fetchCameraStatus();
+    fetchXarmStatus();
     setInterval(fetchStatus, 2000);
     setInterval(fetchCameraStatus, 2000);
+    setInterval(fetchXarmStatus, 2000);
   </script>
 </body>
 </html>

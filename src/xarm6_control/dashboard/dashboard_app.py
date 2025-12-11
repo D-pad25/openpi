@@ -6,9 +6,10 @@ Web dashboard for:
 - Starting the XArm policy server via HPC orchestrator
 - Showing orchestrator state live
 - Displaying two camera feeds (base + wrist) via MJPEG
+- Running the local xArm client with a chosen prompt
 
 Run with:
-    uv run src/xarm6_control/dashboard_app.py
+    uv run src/xarm6_control/dashboard/dashboard_app.py
 
 Then open:
     http://localhost:9000
@@ -18,16 +19,18 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Optional, Dict, Any, Generator
+from typing import Optional, Dict, Any, Generator, List
 
 import subprocess
 from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import (
     HTMLResponse,
     StreamingResponse,
     JSONResponse,
 )
+from pydantic import BaseModel
 
 # Import orchestrator (with CLEARING_OLD_ENDPOINT, health polling, etc.)
 from xarm6_control.dashboard.xarm_server_orchestrator import (
@@ -45,8 +48,19 @@ from xarm6_control.dashboard.zmq_camera_backend import (
 # ============================================================
 # DEFINES
 # ============================================================
+
+# Folder where this dashboard + xarm_pipeline.sh live
 REPO_ROOT = Path(__file__).resolve().parent
 PIPELINE_SCRIPT = REPO_ROOT / "xarm_pipeline.sh"
+
+# Top-level openpi repo root (where src/ lives)
+# e.g. .../Thesis/openpi
+OPENPI_ROOT = Path(__file__).resolve().parents[3]
+
+DEFAULT_XARM_PROMPT = (
+    "Pick a ripe, red tomato and drop it in the blue bucket. [crop=tomato]"
+)
+XARM_PORT = "8000"
 
 # ============================================================
 # Global orchestrator + thread + status storage
@@ -65,12 +79,52 @@ _last_status: Dict[str, Any] = {
 _camera_server_lock = threading.Lock()
 _camera_server_process: Optional[subprocess.Popen] = None
 
-
-
+# Orchestrator + thread
 _orchestrator: Optional[Orchestrator] = None
 _orch_thread: Optional[threading.Thread] = None
 _orch_thread_lock = threading.Lock()
 
+# ============================================================
+# xArm client process + log
+# ============================================================
+
+_xarm_lock = threading.Lock()
+_xarm_process: Optional[subprocess.Popen] = None
+_xarm_log_lines: List[str] = []
+_MAX_XARM_LOG_LINES = 200
+
+
+def _append_xarm_log(line: str) -> None:
+    """Append a line to the in-memory xArm client log."""
+    line = line.rstrip("\n")
+    with _xarm_lock:
+        _xarm_log_lines.append(line)
+        if len(_xarm_log_lines) > _MAX_XARM_LOG_LINES:
+            # keep only the last N lines
+            del _xarm_log_lines[:-_MAX_XARM_LOG_LINES]
+    print(f"[xarm-client-log] {line}")
+
+
+def _xarm_log_reader(proc: subprocess.Popen) -> None:
+    """Background thread: read stdout from xArm client and store in log."""
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            _append_xarm_log(line)
+    except Exception as e:
+        _append_xarm_log(f"[dashboard] Error reading xArm client output: {e}")
+    finally:
+        rc = proc.wait()
+        _append_xarm_log(f"[dashboard] xArm client exited with return code {rc}")
+
+
+class RunXarmRequest(BaseModel):
+    prompt: Optional[str] = None
+
+
+# ============================================================
+# Orchestrator helpers
+# ============================================================
 
 def _on_state_change(state: OrchestratorState, message: str) -> None:
     """Callback from Orchestrator to update status for UI."""
@@ -118,9 +172,11 @@ def _start_orchestrator_thread() -> bool:
         return True
 
 
-# Create shared backends (one per camera)
+# ============================================================
+# Create shared camera backends (one per camera)
+# ============================================================
+
 base_camera = ZmqCameraBackend(
-    # host="172.23.224.1",
     host="127.0.0.1",
     port=5000,
     img_size=None,   # or (640, 480) if you want to downsample
@@ -281,8 +337,6 @@ def api_start_cameras() -> Dict[str, Any]:
     return {"status": "started"}
 
 
-
-
 @app.get("/video/base")
 def video_base() -> StreamingResponse:
     return StreamingResponse(
@@ -297,6 +351,7 @@ def video_wrist() -> StreamingResponse:
         mjpeg_stream_generator(wrist_camera),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
+
 
 @app.get("/api/camera-status", response_class=JSONResponse)
 def api_camera_status() -> Dict[str, Any]:
@@ -316,6 +371,127 @@ def api_camera_status() -> Dict[str, Any]:
         "wrist": wrist_camera.get_status(),
     }
 
+
+# ============================================================
+# xArm client API
+# ============================================================
+
+@app.post("/api/run-xarm", response_class=JSONResponse)
+def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
+    """
+    Start the local xArm client (pi0 / VLA policy) with an optional prompt.
+
+    Uses:
+        uv run src/xarm6_control/main2.py --remote_host localhost --remote_port 8000 --prompt "<prompt>"
+    """
+    global _xarm_process
+
+    # Ensure policy server is READY before running client
+    with _status_lock:
+        state = _last_status["state"]
+
+    if state != OrchestratorState.READY.value:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Policy server not READY (current state: {state}). Start it first.",
+        )
+
+    with _xarm_lock:
+        if _xarm_process is not None and _xarm_process.poll() is None:
+            raise HTTPException(
+                status_code=409,
+                detail="xArm client is already running.",
+            )
+
+        prompt = (req.prompt or DEFAULT_XARM_PROMPT).strip()
+        if not prompt:
+            prompt = DEFAULT_XARM_PROMPT
+
+        cmd = [
+            "uv",
+            "run",
+            "src/xarm6_control/main2.py",
+            "--remote_host",
+            "localhost",
+            "--remote_port",
+            XARM_PORT,
+            "--prompt",
+            prompt,
+        ]
+
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=str(OPENPI_ROOT),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to start xArm client: {e}",
+            )
+
+        _xarm_process = proc
+        _xarm_log_lines.clear()
+        _append_xarm_log("[dashboard] Starting xArm client...")
+        _append_xarm_log(f"[dashboard] Prompt: {prompt}")
+
+        t = threading.Thread(target=_xarm_log_reader, args=(proc,), daemon=True)
+        t.start()
+
+    return {"status": "started"}
+
+
+@app.post("/api/stop-xarm", response_class=JSONResponse)
+def api_stop_xarm() -> Dict[str, Any]:
+    """
+    Soft-stop the local xArm client process (terminate).
+    """
+    global _xarm_process
+    with _xarm_lock:
+        proc = _xarm_process
+
+    if proc is None or proc.poll() is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="xArm client is not running.",
+        )
+
+    try:
+        proc.terminate()
+        _append_xarm_log("[dashboard] Sent terminate() to xArm client.")
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to stop xArm client: {e}",
+        )
+
+    return {"status": "terminating"}
+
+
+@app.get("/api/xarm-status", response_class=JSONResponse)
+def api_xarm_status() -> Dict[str, Any]:
+    """
+    Return current xArm client state and recent log output.
+    """
+    with _xarm_lock:
+        proc = _xarm_process
+        if proc is None:
+            running = False
+            returncode = None
+        else:
+            running = proc.poll() is None
+            returncode = proc.returncode
+
+        log = "\n".join(_xarm_log_lines)
+
+    return {
+        "running": running,
+        "returncode": returncode,
+        "log": log,
+    }
 
 
 # ============================================================
