@@ -22,7 +22,14 @@ def launch_server(port: int, camera_id: int, args: Args):
 
 def main(args):
     ids = get_device_ids()
-    print(f"Found RealSense devices: {ids}")
+    print(f"Found RealSense devices: {ids}", flush=True)
+    if not ids:
+        print(
+            "ERROR: No RealSense devices found. "
+            "Please check USB connections and power.",
+            flush=True,
+        )
+        raise SystemExit(1)   # <<< important: non-zero exit code
     camera_port = 5000
     camera_servers = []
     for camera_id in ids:
