@@ -71,8 +71,8 @@ run_hpc_cmd() {
 #!/bin/bash
 #PBS -N openpi_cmd
 #PBS -q gpu_batch
-#PBS -l select=1:ncpus=4:ngpus=1:mem=64gb
-#PBS -l walltime=04:00:00
+#PBS -l select=1:ncpus=4:ngpus=1:mem=32gb
+#PBS -l walltime=01:00:00
 #PBS -j oe
 
 set -euo pipefail
