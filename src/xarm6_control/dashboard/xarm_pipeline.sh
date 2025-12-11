@@ -15,7 +15,7 @@ HPC_REPO_DIR="/home/n10813934/gitRepos/openpi"   # path to repo on HPC
 
 # Local machine repo path (where xarm6_control lives)
 LOCAL_REPO_DIR="$HOME/Thesis/openpi"           # adjust to e.g. "$HOME/Thesis/openpi" if needed
-
+LOCAL_REPO_DIR="$HOME/openpi" # If on local
 # Dataset paths (on HPC)
 DATA_DIR="/home/n10813934/data/tfds_datasets"
 LEROBOT_ROOT="/home/n10813934/.cache/huggingface/lerobot/dpad25/agrivla_pick_tomatoes_v1"
@@ -70,7 +70,7 @@ run_hpc_cmd() {
   ssh "${HPC_PREFIX}" "export JOB_CMD=\"$job_cmd\" HPC_REPO_DIR='${HPC_REPO_DIR}' VENV_DIR='${VENV_DIR}'; qsub -V << 'EOF'
 #!/bin/bash
 #PBS -N openpi_cmd
-#PBS -q gpu_batch
+#PBS -q gpu_inter
 #PBS -l select=1:ncpus=4:ngpus=1:mem=32gb
 #PBS -l walltime=01:00:00
 #PBS -j oe
