@@ -43,7 +43,7 @@ class OrchestratorConfig:
     endpoint_file: str = "~/.openpi_policy_endpoint"  # on HPC
 
     # How long to wait for the endpoint file to appear
-    wait_endpoint_timeout_s: int = 300
+    wait_endpoint_timeout_s: int = 500
     wait_endpoint_poll_s: int = 5
 
     # Single WebSocket connect timeout (per attempt)

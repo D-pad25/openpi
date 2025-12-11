@@ -154,7 +154,7 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
 
     EnvMode.DEMO: Checkpoint(
         config="pi0_lora_xarm6_agrivla_pi0_all",
-        dir="/media/acrv/DanielsSSD/Thesis/pi0/checkpoints/29999/pi0_lora_xarm6_agrivla_pi0_all/29999",
+        dir="/mnt/d/Thesis/pi0/checkpoints/29999/pi0_lora_xarm6_agrivla_pi0_all/29999",
     ),
 }
 
@@ -165,6 +165,10 @@ def create_default_policy(env: EnvMode, *, default_prompt: str | None = None) ->
             _config.get_config(checkpoint.config), checkpoint.dir, default_prompt=default_prompt
         )
     raise ValueError(f"Unsupported environment mode: {env}")
+
+
+
+
 
 
 def create_policy(args: Args) -> _policy.Policy:
