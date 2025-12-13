@@ -417,9 +417,10 @@ def _start_local_policy_server_blocking() -> None:
         if _local_server_process is not None and _local_server_process.poll() is None:
             raise RuntimeError("Local policy server is already running.")
 
+    global _local_server_returncode
     with _local_server_log_lock:
         _local_server_log_lines.clear()
-        _set_local_server_returncode(None)
+        _local_server_returncode = None
 
     _set_status("STARTING_LOCAL", "Starting local policy server...", server_mode=ServerMode.LOCAL)
 
@@ -652,6 +653,7 @@ def api_run_server(req: RunServerRequest) -> Dict[str, Any]:
         _set_hpc_cancel_requested(False)
         _set_status(OrchestratorState.SUBMITTING_JOB.value, "Submitting policy server job...", server_mode=ServerMode.HPC)
 
+        _append_local_server_log("[dashboard] Run Local pressed.")
         started = _start_orchestrator_thread()
         if not started:
             _set_active_mode(None)
@@ -833,8 +835,9 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
         )
 
         _xarm_process = proc
+        global _xarm_returncode
         _xarm_log_lines.clear()
-        _set_xarm_returncode(None)
+        _xarm_returncode = None
 
         _append_xarm_log("[dashboard] Starting xArm client...")
         _append_xarm_log(f"[dashboard] OPENPI_ROOT: {OPENPI_ROOT}")
