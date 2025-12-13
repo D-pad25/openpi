@@ -358,6 +358,52 @@
     const xarmStatusLabel = document.getElementById("xarm-status-label");
     const xarmLogElem = document.getElementById("xarm-log");
 
+    const busyStates = [
+      "CLEARING_OLD_ENDPOINT",
+      "SUBMITTING_JOB",
+      "JOB_QUEUED",
+      "JOB_RUNNING_STARTING_SERVER",
+      "SERVER_READY_NO_TUNNEL",
+      "STARTING_TUNNEL",
+      "CHECKING_POLICY_HEALTH",
+    ];
+
+    function getSelectedMode() {
+      const selected = document.querySelector('input[name="server-mode"]:checked');
+      return selected ? selected.value : "local";
+    }
+
+    function setRadioUI(mode) {
+      const radios = document.querySelectorAll('input[name="server-mode"]');
+      radios.forEach(r => { r.checked = (r.value === mode); });
+    }
+
+    async function setServerMode(mode, silent=false) {
+      try {
+        const resp = await fetch("/api/set-server-mode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode }),
+        });
+
+        if (!resp.ok) {
+          const text = await resp.text();
+          if (!silent) alert("Failed to set mode: " + text);
+          // Re-sync UI from backend
+          await fetchStatus();
+          return false;
+        }
+
+        // Refresh UI from backend truth
+        await fetchStatus();
+        return true;
+      } catch (e) {
+        if (!silent) alert("Error setting mode: " + e);
+        await fetchStatus();
+        return false;
+      }
+    }
+
     function updateStatusView(data) {
       const state = (data.state || "IDLE").toUpperCase();
       const msg = data.message || "";
@@ -366,12 +412,12 @@
         ? `${data.remote_ip}:${data.remote_port}`
         : "—";
       const serverRunning = !!data.server_running;
-      const mode = (data.server_mode || "hpc").toLowerCase();
+      const mode = (data.server_mode || "local").toLowerCase();
+      const isBusy = busyStates.includes(state);
 
-      // Status text – include mode when running
       statusText.textContent = serverRunning
         ? `${state} (${mode.toUpperCase()})`
-        : state;
+        : `${state} (${mode.toUpperCase()})`;
 
       lastMessage.textContent = msg;
       metaJob.textContent = `Job: ${jobId}`;
@@ -391,29 +437,21 @@
         statusDot.classList.add("status-busy");
       }
 
-      const busyStates = [
-        "CLEARING_OLD_ENDPOINT",
-        "SUBMITTING_JOB",
-        "JOB_QUEUED",
-        "JOB_RUNNING_STARTING_SERVER",
-        "SERVER_READY_NO_TUNNEL",
-        "STARTING_TUNNEL",
-        "CHECKING_POLICY_HEALTH",
-      ];
+      // Backend is truth, but DON'T fight the user while idle.
+      // Only force-sync radios when server is running or in a busy sequence.
+      if (serverRunning || isBusy) {
+        setRadioUI(mode);
+      }
 
-      // Sync the radio buttons with backend mode
+      // Disable mode switching while running/busy (backend also enforces)
       const radios = document.querySelectorAll('input[name="server-mode"]');
-      radios.forEach(r => {
-        if (r.value === mode) r.checked = true;
-      });
+      radios.forEach(r => { r.disabled = (serverRunning || isBusy); });
 
-      // Button state
+      // Run button
       if (serverRunning) {
         runBtn.disabled = true;
-        runBtn.textContent = mode === "local"
-          ? "Local server running"
-          : "Server running";
-      } else if (busyStates.includes(state)) {
+        runBtn.textContent = mode === "local" ? "Local server running" : "Server running";
+      } else if (isBusy) {
         runBtn.disabled = true;
         runBtn.textContent = "Running...";
       } else {
@@ -477,11 +515,13 @@
     async function fetchStatus() {
       try {
         const resp = await fetch("/api/status");
-        if (!resp.ok) return;
+        if (!resp.ok) return null;
         const data = await resp.json();
         updateStatusView(data);
+        return data;
       } catch (e) {
         console.error("Status poll failed:", e);
+        return null;
       }
     }
 
@@ -508,8 +548,8 @@
     }
 
     async function runServer() {
-      const selected = document.querySelector('input[name="server-mode"]:checked');
-      const mode = selected ? selected.value : "hpc";
+      // Use whatever is currently selected in the UI (which should already be persisted)
+      const mode = getSelectedMode();
 
       try {
         const resp = await fetch("/api/run-server", {
@@ -520,6 +560,8 @@
         if (!resp.ok) {
           const text = await resp.text();
           alert("Failed to start server: " + text);
+        } else {
+          await fetchStatus();
         }
       } catch (e) {
         alert("Error starting server: " + e);
@@ -557,7 +599,6 @@
       } catch (e) {
         alert("Error starting camera server: " + e);
       } finally {
-        // actual running state will be picked up by polling
         camBtn.textContent = "📷 Start Camera Server";
       }
     }
@@ -610,13 +651,32 @@
     xarmRunBtn.addEventListener("click", runXarm);
     xarmStopBtn.addEventListener("click", stopXarm);
 
-    // Poll status every 2 seconds
-    fetchStatus();
-    fetchCameraStatus();
-    fetchXarmStatus();
-    setInterval(fetchStatus, 2000);
-    setInterval(fetchCameraStatus, 2000);
-    setInterval(fetchXarmStatus, 2000);
+    // Whenever the user changes the mode, persist it to backend
+    document.querySelectorAll('input[name="server-mode"]').forEach(r => {
+      r.addEventListener("change", async (e) => {
+        await setServerMode(e.target.value);
+      });
+    });
+
+    // Initial load:
+    // - fetch status once
+    // - if no server running, force backend mode to LOCAL (your desired default)
+    // - then start polling
+    (async function init() {
+      const status = await fetchStatus();
+      await fetchCameraStatus();
+      await fetchXarmStatus();
+
+      if (status && !status.server_running) {
+        // Set backend to local default on open (silent)
+        setRadioUI("local");
+        await setServerMode("local", true);
+      }
+
+      setInterval(fetchStatus, 2000);
+      setInterval(fetchCameraStatus, 2000);
+      setInterval(fetchXarmStatus, 2000);
+    })();
   </script>
 </body>
 </html>

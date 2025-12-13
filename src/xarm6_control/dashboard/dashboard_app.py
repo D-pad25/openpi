@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Optional, Dict, Any, Generator, List
+from typing import Optional, Dict, Any, List
 from enum import Enum
 
 import subprocess
@@ -50,12 +50,9 @@ from xarm6_control.dashboard.zmq_camera_backend import (
 # DEFINES
 # ============================================================
 
-# Folder where this dashboard + xarm_pipeline.sh live
 REPO_ROOT = Path(__file__).resolve().parent
 PIPELINE_SCRIPT = REPO_ROOT / "xarm_pipeline.sh"
 
-# Top-level openpi repo root (where src/ lives)
-# e.g. .../Thesis/openpi
 OPENPI_ROOT = Path(__file__).resolve().parents[3]
 
 DEFAULT_XARM_PROMPT = (
@@ -76,27 +73,25 @@ class ServerMode(str, Enum):
 
 app = FastAPI(title="XArm6 Demo Dashboard")
 
-# Global status storage
 _status_lock = threading.Lock()
+
+# Default to LOCAL (your desired main mode)
 _last_status: Dict[str, Any] = {
     "state": OrchestratorState.IDLE.value,
     "message": "Idle",
-    "server_mode": ServerMode.LOCAL.value,  # default to LOCAL
+    "server_mode": ServerMode.LOCAL.value,
 }
 
-# Track which mode we're in for the policy server
+# Persisted selected mode (changes via /api/set-server-mode)
 _server_mode: ServerMode = ServerMode.LOCAL
 
-# Global camera server process (if any)
 _camera_server_lock = threading.Lock()
 _camera_server_process: Optional[subprocess.Popen] = None
 
-# Orchestrator + thread
 _orchestrator: Optional[Orchestrator] = None
 _orch_thread: Optional[threading.Thread] = None
 _orch_thread_lock = threading.Lock()
 
-# Local policy server process (if any)
 _local_server_lock = threading.Lock()
 _local_server_process: Optional[subprocess.Popen] = None
 
@@ -111,18 +106,15 @@ _MAX_XARM_LOG_LINES = 200
 
 
 def _append_xarm_log(line: str) -> None:
-    """Append a line to the in-memory xArm client log."""
     line = line.rstrip("\n")
     with _xarm_lock:
         _xarm_log_lines.append(line)
         if len(_xarm_log_lines) > _MAX_XARM_LOG_LINES:
-            # keep only the last N lines
             del _xarm_log_lines[:-_MAX_XARM_LOG_LINES]
     print(f"[xarm-client-log] {line}")
 
 
 def _xarm_log_reader(proc: subprocess.Popen) -> None:
-    """Background thread: read stdout from xArm client and store in log."""
     try:
         assert proc.stdout is not None
         for line in proc.stdout:
@@ -139,8 +131,11 @@ class RunXarmRequest(BaseModel):
 
 
 class RunServerRequest(BaseModel):
-    """Request body for choosing where to start the policy server."""
-    mode: ServerMode = ServerMode.HPC
+    mode: ServerMode = ServerMode.LOCAL
+
+
+class SetModeRequest(BaseModel):
+    mode: ServerMode
 
 
 # ============================================================
@@ -148,7 +143,6 @@ class RunServerRequest(BaseModel):
 # ============================================================
 
 def _on_state_change(state: OrchestratorState, message: str) -> None:
-    """Callback from Orchestrator to update status for UI."""
     global _server_mode
     with _status_lock:
         _last_status["state"] = state.value
@@ -158,25 +152,15 @@ def _on_state_change(state: OrchestratorState, message: str) -> None:
 
 
 def _start_orchestrator_thread() -> bool:
-    """
-    Start orchestrator.run_full_sequence() in a background thread.
-
-    Returns:
-        True  if a new thread was started.
-        False if an orchestration is already in progress or server is READY.
-    """
     global _orchestrator, _orch_thread
 
     with _orch_thread_lock:
-        # If thread exists and is still alive, we consider orchestration "busy".
         if _orch_thread is not None and _orch_thread.is_alive():
             return False
 
-        # If an orchestrator exists and is already READY, don't start again.
         if _orchestrator is not None and _orchestrator.state == OrchestratorState.READY:
             return False
 
-        # Create fresh orchestrator and thread
         config = OrchestratorConfig()
         orch = Orchestrator(config=config)
         orch.on_state_change = _on_state_change
@@ -186,7 +170,6 @@ def _start_orchestrator_thread() -> bool:
             try:
                 orch.run_full_sequence()
             finally:
-                # Keep orchestrator object so UI can still display final state.
                 pass
 
         t = threading.Thread(target=_run, daemon=True)
@@ -196,14 +179,11 @@ def _start_orchestrator_thread() -> bool:
 
 
 def _local_server_running() -> bool:
-    """Return True if the local policy server subprocess is alive."""
     with _local_server_lock:
         return _local_server_process is not None and _local_server_process.poll() is None
 
 
 def _any_server_running() -> bool:
-    """Return True if an HPC orchestration/server or local server is active."""
-    # HPC orchestration thread in progress?
     with _orch_thread_lock:
         hpc_thread_alive = _orch_thread is not None and _orch_thread.is_alive()
 
@@ -215,10 +195,6 @@ def _any_server_running() -> bool:
 
 
 def _start_local_policy_server() -> None:
-    """
-    Start the policy server locally (no HPC).
-    Raises RuntimeError if already running or can't start.
-    """
     global _local_server_process
 
     with _local_server_lock:
@@ -235,16 +211,12 @@ def _start_local_policy_server() -> None:
             XARM_PORT,
         ]
         try:
-            proc = subprocess.Popen(
-                cmd,
-                cwd=str(OPENPI_ROOT),
-            )
+            proc = subprocess.Popen(cmd, cwd=str(OPENPI_ROOT))
         except Exception as e:
             raise RuntimeError(f"Failed to start local policy server: {e}") from e
 
         _local_server_process = proc
 
-    # Optimistically mark READY; /api/status will downgrade if it dies
     with _status_lock:
         _last_status["state"] = OrchestratorState.READY.value
         _last_status["message"] = f"Local policy server running on localhost:{XARM_PORT}"
@@ -252,13 +224,13 @@ def _start_local_policy_server() -> None:
 
 
 # ============================================================
-# Create shared camera backends (one per camera)
+# Cameras
 # ============================================================
 
 base_camera = ZmqCameraBackend(
     host="127.0.0.1",
     port=5000,
-    img_size=None,   # or (640, 480) if you want to downsample
+    img_size=None,
     name="base",
     target_fps=15.0,
 )
@@ -275,10 +247,7 @@ wrist_camera = ZmqCameraBackend(
 # HTML Frontend
 # ============================================================
 
-# Path to the HTML file (in the same folder as this script)
 _INDEX_PATH = Path(__file__).with_name("index.html")
-
-# Read once at import time (simple and fast)
 INDEX_HTML = _INDEX_PATH.read_text(encoding="utf-8")
 
 # ============================================================
@@ -292,21 +261,16 @@ def index() -> str:
 
 @app.get("/api/status", response_class=JSONResponse)
 def api_status() -> Dict[str, Any]:
-    """
-    Return latest orchestrator state + message + job/remote info.
-    Also expose a simple server_running flag for the UI and which mode is active.
-    """
     with _status_lock:
         state = _last_status["state"]
         message = _last_status["message"]
-        server_mode = _last_status.get("server_mode", ServerMode.HPC.value)
+        server_mode = _last_status.get("server_mode", _server_mode.value)
 
     orch = _orchestrator
     job_id = orch.job_id if orch is not None else None
     remote_ip = orch.remote_ip if orch is not None else None
     remote_port = orch.remote_port if orch is not None else None
 
-    # If we're in local mode, tunnel/job info isn't meaningful
     if server_mode == ServerMode.LOCAL.value:
         job_id = None
         remote_ip = None
@@ -315,7 +279,6 @@ def api_status() -> Dict[str, Any]:
     hpc_ready = orch is not None and orch.state == OrchestratorState.READY
     local_ready = _local_server_running()
 
-    # If we *thought* local was READY but the process is gone, reset to IDLE
     if (
         server_mode == ServerMode.LOCAL.value
         and state == OrchestratorState.READY.value
@@ -324,6 +287,7 @@ def api_status() -> Dict[str, Any]:
         with _status_lock:
             _last_status["state"] = OrchestratorState.IDLE.value
             _last_status["message"] = "Local policy server is not running."
+            # keep server_mode as LOCAL
             state = _last_status["state"]
             message = _last_status["message"]
 
@@ -342,6 +306,29 @@ def api_status() -> Dict[str, Any]:
     }
 
 
+@app.post("/api/set-server-mode", response_class=JSONResponse)
+def api_set_server_mode(req: SetModeRequest) -> Dict[str, Any]:
+    """
+    Persist the user's selected mode on the backend.
+    Only allowed when nothing is running/busy.
+    """
+    global _server_mode
+
+    if _any_server_running():
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot change mode while a policy server is running/busy.",
+        )
+
+    _server_mode = req.mode
+    with _status_lock:
+        _last_status["server_mode"] = req.mode.value
+        if _last_status["state"] == OrchestratorState.IDLE.value:
+            _last_status["message"] = f"Mode set to {req.mode.value.upper()} (idle)."
+
+    return {"status": "ok", "mode": req.mode.value}
+
+
 @app.post("/api/run-server", response_class=JSONResponse)
 def api_run_server(req: RunServerRequest) -> Dict[str, Any]:
     global _server_mode
@@ -352,14 +339,14 @@ def api_run_server(req: RunServerRequest) -> Dict[str, Any]:
             detail="Policy server already running (HPC or local).",
         )
 
-    if req.mode == ServerMode.HPC:
-        # Set before thread start so _on_state_change uses correct mode
-        _server_mode = ServerMode.HPC
+    # Ensure backend mode matches what caller requested
+    _server_mode = req.mode
+    with _status_lock:
+        _last_status["server_mode"] = req.mode.value
 
+    if req.mode == ServerMode.HPC:
         started = _start_orchestrator_thread()
         if not started:
-            # Optional: reset to default if you care
-            # _server_mode = ServerMode.LOCAL
             raise HTTPException(
                 status_code=409,
                 detail="Server orchestration already running or server already READY.",
@@ -373,21 +360,16 @@ def api_run_server(req: RunServerRequest) -> Dict[str, Any]:
         return {"status": "started", "mode": "hpc"}
 
     # LOCAL
-    _server_mode = ServerMode.LOCAL
     try:
-        _start_local_policy_server()  # should set _last_status incl server_mode=local
+        _start_local_policy_server()
     except RuntimeError as e:
-        # Optional: reset on failure
-        # _server_mode = ServerMode.LOCAL
         raise HTTPException(status_code=500, detail=str(e))
 
     return {"status": "started", "mode": "local"}
 
+
 @app.get("/api/health", response_class=JSONResponse)
 def api_health() -> Dict[str, Any]:
-    """
-    Trigger an explicit health check using the orchestrator's method (HPC mode only).
-    """
     orch = _orchestrator
     if orch is None:
         return {"status": "unknown", "detail": "Orchestrator has not run yet."}
@@ -401,12 +383,6 @@ def api_health() -> Dict[str, Any]:
 
 @app.post("/api/start-cameras", response_class=JSONResponse)
 def api_start_cameras() -> Dict[str, Any]:
-    """
-    Start the local camera nodes via xarm_pipeline.sh cameras.
-
-    If the script exits immediately with an error (e.g. no RealSense devices),
-    capture its output and return it as an HTTP 500 so the UI can show it.
-    """
     global _camera_server_process
 
     if not PIPELINE_SCRIPT.exists():
@@ -416,7 +392,6 @@ def api_start_cameras() -> Dict[str, Any]:
         )
 
     with _camera_server_lock:
-        # If process exists and is still running, don't start another
         if _camera_server_process is not None and _camera_server_process.poll() is None:
             raise HTTPException(
                 status_code=409,
@@ -426,7 +401,6 @@ def api_start_cameras() -> Dict[str, Any]:
         cmd = ["bash", str(PIPELINE_SCRIPT), "cameras"]
 
         try:
-            # Capture stdout+stderr so we can surface errors if it dies quickly
             proc = subprocess.Popen(
                 cmd,
                 cwd=str(REPO_ROOT),
@@ -440,11 +414,9 @@ def api_start_cameras() -> Dict[str, Any]:
                 detail=f"Failed to start camera server: {e}",
             )
 
-        # Give the script a short window to either stay alive or fail fast
         time.sleep(3.0)
         ret = proc.poll()
         if ret is not None and ret != 0:
-            # Process exited with error – grab its output for debugging
             try:
                 output, _ = proc.communicate(timeout=1.0)
             except Exception:
@@ -455,7 +427,6 @@ def api_start_cameras() -> Dict[str, Any]:
                 detail=f"Camera server exited early with code {ret}:\n{output}",
             )
 
-        # Otherwise assume it's running in the background
         _camera_server_process = proc
 
     return {"status": "started"}
@@ -479,14 +450,10 @@ def video_wrist() -> StreamingResponse:
 
 @app.get("/api/camera-status", response_class=JSONResponse)
 def api_camera_status() -> Dict[str, Any]:
-    """
-    Return status for each camera so the UI can show ONLINE / DISCONNECTED,
-    plus whether the camera *server* process is running.
-    """
     with _camera_server_lock:
         server_running = (
             _camera_server_process is not None
-            and _camera_server_process.poll() is None  # None => still running
+            and _camera_server_process.poll() is None
         )
 
     return {
@@ -496,21 +463,10 @@ def api_camera_status() -> Dict[str, Any]:
     }
 
 
-# ============================================================
-# xArm client API
-# ============================================================
-
 @app.post("/api/run-xarm", response_class=JSONResponse)
 def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
-    """
-    Start the local xArm client (pi0 / VLA policy) with an optional prompt.
-
-    Uses:
-        uv run src/xarm6_control/main2.py --remote_host localhost --remote_port 8000 --prompt "<prompt>"
-    """
     global _xarm_process
 
-    # Ensure policy server is READY before running client
     with _status_lock:
         state = _last_status["state"]
 
@@ -527,9 +483,7 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
                 detail="xArm client is already running.",
             )
 
-        prompt = (req.prompt or DEFAULT_XARM_PROMPT).strip()
-        if not prompt:
-            prompt = DEFAULT_XARM_PROMPT
+        prompt = (req.prompt or DEFAULT_XARM_PROMPT).strip() or DEFAULT_XARM_PROMPT
 
         cmd = [
             "uv",
@@ -570,9 +524,6 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
 
 @app.post("/api/stop-xarm", response_class=JSONResponse)
 def api_stop_xarm() -> Dict[str, Any]:
-    """
-    Soft-stop the local xArm client process (terminate).
-    """
     global _xarm_process
     with _xarm_lock:
         proc = _xarm_process
@@ -597,9 +548,6 @@ def api_stop_xarm() -> Dict[str, Any]:
 
 @app.get("/api/xarm-status", response_class=JSONResponse)
 def api_xarm_status() -> Dict[str, Any]:
-    """
-    Return current xArm client state and recent log output.
-    """
     with _xarm_lock:
         proc = _xarm_process
         if proc is None:
@@ -617,10 +565,6 @@ def api_xarm_status() -> Dict[str, Any]:
         "log": log,
     }
 
-
-# ============================================================
-# Entrypoint
-# ============================================================
 
 if __name__ == "__main__":
     import uvicorn
