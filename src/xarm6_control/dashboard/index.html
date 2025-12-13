@@ -22,10 +22,7 @@
       justify-content: space-between;
       align-items: center;
     }
-    header h1 {
-      margin: 0;
-      font-size: 1.3rem;
-    }
+    header h1 { margin: 0; font-size: 1.3rem; }
     main {
       flex: 1;
       padding: 16px 24px 24px;
@@ -40,16 +37,9 @@
       border: 1px solid #1f2937;
       box-shadow: 0 10px 25px rgba(0,0,0,0.45);
     }
-    .card h2 {
-      margin-top: 0;
-      font-size: 1.1rem;
-      margin-bottom: 8px;
-    }
-    .cams-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-gap: 8px;
-    }
+    .card h2 { margin-top: 0; font-size: 1.1rem; margin-bottom: 8px; }
+
+    .cams-grid { display: grid; grid-template-columns: 1fr 1fr; grid-gap: 8px; }
     .cam-box {
       border-radius: 10px;
       overflow: hidden;
@@ -73,6 +63,7 @@
       display: block;
       background: #111827;
     }
+
     .status-chip {
       display: inline-flex;
       align-items: center;
@@ -82,15 +73,11 @@
       font-size: 0.8rem;
       border: 1px solid #1f2937;
     }
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 999px;
-    }
-    .status-idle   { background: #4b5563; }
-    .status-busy   { background: #fbbf24; }
-    .status-ready  { background: #22c55e; }
-    .status-error  { background: #ef4444; }
+    .status-dot { width: 8px; height: 8px; border-radius: 999px; }
+    .status-idle { background: #4b5563; }
+    .status-busy { background: #fbbf24; }
+    .status-ready { background: #22c55e; }
+    .status-error { background: #ef4444; }
 
     button {
       border-radius: 999px;
@@ -112,10 +99,8 @@
       border: 1px solid #374151;
       color: #e5e7eb;
     }
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+
     .log {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       background: #020617;
@@ -127,6 +112,7 @@
       overflow-y: auto;
       white-space: pre-wrap;
     }
+
     .meta-row {
       display: flex;
       flex-wrap: wrap;
@@ -141,6 +127,7 @@
       background: #020617;
       border: 1px solid #111827;
     }
+
     footer {
       padding: 8px 16px;
       font-size: 0.75rem;
@@ -149,6 +136,7 @@
       border-top: 1px solid #111827;
       text-align: right;
     }
+
     .cam-status {
       font-size: 0.75rem;
       margin-left: 8px;
@@ -156,20 +144,10 @@
       border-radius: 999px;
       border: 1px solid #1f2937;
     }
-    .cam-online {
-      background: #14532d;
-      color: #bbf7d0;
-    }
-    .cam-offline {
-      background: #450a0a;
-      color: #fecaca;
-    }
+    .cam-online { background: #14532d; color: #bbf7d0; }
+    .cam-offline { background: #450a0a; color: #fecaca; }
 
-    .right-col {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
+    .right-col { display: flex; flex-direction: column; gap: 16px; }
 
     .xarm-controls label {
       display: block;
@@ -189,40 +167,13 @@
       font-size: 0.85rem;
       font-family: inherit;
     }
-    .xarm-buttons {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 8px;
-      margin-bottom: 8px;
-    }
-    .xarm-status-pill {
-      font-size: 0.75rem;
-      padding: 3px 10px;
-      border-radius: 999px;
-      border: 1px solid #1f2937;
-    }
-    .xarm-status-idle {
-      background: #111827;
-      color: #e5e7eb;
-    }
-    .xarm-status-running {
-      background: #14532d;
-      color: #bbf7d0;
-    }
-    .xarm-status-ok {
-      background: #0f766e;
-      color: #a5f3fc;
-    }
-    .xarm-status-error {
-      background: #450a0a;
-      color: #fecaca;
-    }
-    .xarm-log-header {
-      font-size: 0.8rem;
-      color: #9ca3af;
-      margin-bottom: 4px;
-    }
+    .xarm-buttons { display: flex; align-items: center; gap: 8px; margin-top: 8px; margin-bottom: 8px; }
+    .xarm-status-pill { font-size: 0.75rem; padding: 3px 10px; border-radius: 999px; border: 1px solid #1f2937; }
+    .xarm-status-idle { background: #111827; color: #e5e7eb; }
+    .xarm-status-running { background: #14532d; color: #bbf7d0; }
+    .xarm-status-ok { background: #0f766e; color: #a5f3fc; }
+    .xarm-status-error { background: #450a0a; color: #fecaca; }
+    .xarm-log-header { font-size: 0.8rem; color: #9ca3af; margin-bottom: 4px; }
 
     .mode-toggle {
       display: inline-flex;
@@ -246,11 +197,10 @@
       gap: 4px;
       cursor: pointer;
     }
-    .mode-toggle input[type="radio"] {
-      accent-color: #22c55e;
-    }
+    .mode-toggle input[type="radio"] { accent-color: #22c55e; }
   </style>
 </head>
+
 <body>
   <header>
     <h1>XArm6 Policy Server Dashboard</h1>
@@ -258,14 +208,15 @@
       <div class="mode-toggle">
         <span class="label">Mode</span>
         <label>
-          <input type="radio" name="server-mode" value="local" checked>
+          <input id="mode-local" type="radio" name="server-mode" value="local" checked>
           Local
         </label>
         <label>
-          <input type="radio" name="server-mode" value="hpc">
+          <input id="mode-hpc" type="radio" name="server-mode" value="hpc">
           HPC
         </label>
       </div>
+
       <button id="run-btn" class="primary">▶ Run Policy Server</button>
       <button id="health-btn" class="secondary">❤️ Check Health</button>
       <button id="cam-btn" class="secondary">📷 Start Camera Server</button>
@@ -294,7 +245,7 @@
       </div>
     </section>
 
-    <!-- Right: server + xArm client stacked -->
+    <!-- Right column -->
     <div class="right-col">
       <section class="card">
         <h2>Server & Tunnel Status</h2>
@@ -313,6 +264,11 @@
           <strong>Last message:</strong>
         </div>
         <div id="last-message" class="log"></div>
+
+        <div style="margin-top: 10px; font-size: 0.8rem; color: #9ca3af;">
+          <strong>Policy server log (local):</strong>
+        </div>
+        <pre id="policy-log" class="log"></pre>
       </section>
 
       <section class="card">
@@ -358,50 +314,14 @@
     const xarmStatusLabel = document.getElementById("xarm-status-label");
     const xarmLogElem = document.getElementById("xarm-log");
 
-    const busyStates = [
-      "CLEARING_OLD_ENDPOINT",
-      "SUBMITTING_JOB",
-      "JOB_QUEUED",
-      "JOB_RUNNING_STARTING_SERVER",
-      "SERVER_READY_NO_TUNNEL",
-      "STARTING_TUNNEL",
-      "CHECKING_POLICY_HEALTH",
-    ];
+    const policyLogElem = document.getElementById("policy-log");
 
-    function getSelectedMode() {
-      const selected = document.querySelector('input[name="server-mode"]:checked');
-      return selected ? selected.value : "local";
-    }
+    const modeLocal = document.getElementById("mode-local");
+    const modeHpc = document.getElementById("mode-hpc");
 
-    function setRadioUI(mode) {
-      const radios = document.querySelectorAll('input[name="server-mode"]');
-      radios.forEach(r => { r.checked = (r.value === mode); });
-    }
-
-    async function setServerMode(mode, silent=false) {
-      try {
-        const resp = await fetch("/api/set-server-mode", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode }),
-        });
-
-        if (!resp.ok) {
-          const text = await resp.text();
-          if (!silent) alert("Failed to set mode: " + text);
-          // Re-sync UI from backend
-          await fetchStatus();
-          return false;
-        }
-
-        // Refresh UI from backend truth
-        await fetchStatus();
-        return true;
-      } catch (e) {
-        if (!silent) alert("Error setting mode: " + e);
-        await fetchStatus();
-        return false;
-      }
+    function setRadiosEnabled(enabled) {
+      modeLocal.disabled = !enabled;
+      modeHpc.disabled = !enabled;
     }
 
     function updateStatusView(data) {
@@ -412,8 +332,18 @@
         ? `${data.remote_ip}:${data.remote_port}`
         : "—";
       const serverRunning = !!data.server_running;
+      const busy = !!data.busy;
       const mode = (data.server_mode || "local").toLowerCase();
-      const isBusy = busyStates.includes(state);
+
+      // Keep radios in sync with backend mode
+      if (mode === "local") {
+        modeLocal.checked = true;
+      } else {
+        modeHpc.checked = true;
+      }
+
+      // Disable mode changes while running/busy (prevents confusion)
+      setRadiosEnabled(!(serverRunning || busy));
 
       statusText.textContent = serverRunning
         ? `${state} (${mode.toUpperCase()})`
@@ -427,31 +357,16 @@
         : "Server: NOT RUNNING";
 
       statusDot.className = "status-dot";
-      if (state === "READY") {
-        statusDot.classList.add("status-ready");
-      } else if (state.startsWith("ERROR")) {
-        statusDot.classList.add("status-error");
-      } else if (state === "IDLE") {
-        statusDot.classList.add("status-idle");
-      } else {
-        statusDot.classList.add("status-busy");
-      }
+      if (state === "READY") statusDot.classList.add("status-ready");
+      else if (state.startsWith("ERROR")) statusDot.classList.add("status-error");
+      else if (state === "IDLE") statusDot.classList.add("status-idle");
+      else statusDot.classList.add("status-busy");
 
-      // Backend is truth, but DON'T fight the user while idle.
-      // Only force-sync radios when server is running or in a busy sequence.
-      if (serverRunning || isBusy) {
-        setRadioUI(mode);
-      }
-
-      // Disable mode switching while running/busy (backend also enforces)
-      const radios = document.querySelectorAll('input[name="server-mode"]');
-      radios.forEach(r => { r.disabled = (serverRunning || isBusy); });
-
-      // Run button
+      // Button state
       if (serverRunning) {
         runBtn.disabled = true;
         runBtn.textContent = mode === "local" ? "Local server running" : "Server running";
-      } else if (isBusy) {
+      } else if (busy) {
         runBtn.disabled = true;
         runBtn.textContent = "Running...";
       } else {
@@ -512,16 +427,18 @@
       }
     }
 
+    function updatePolicyLogView(data) {
+      policyLogElem.textContent = data.log || "";
+    }
+
     async function fetchStatus() {
       try {
         const resp = await fetch("/api/status");
-        if (!resp.ok) return null;
+        if (!resp.ok) return;
         const data = await resp.json();
         updateStatusView(data);
-        return data;
       } catch (e) {
         console.error("Status poll failed:", e);
-        return null;
       }
     }
 
@@ -547,9 +464,36 @@
       }
     }
 
+    async function fetchPolicyLog() {
+      try {
+        const resp = await fetch("/api/policy-server-log");
+        if (!resp.ok) return;
+        const data = await resp.json();
+        updatePolicyLogView(data);
+      } catch (e) {
+        console.error("Policy log poll failed:", e);
+      }
+    }
+
+    async function setMode(mode) {
+      try {
+        const resp = await fetch("/api/set-mode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode }),
+        });
+        if (!resp.ok) {
+          const text = await resp.text();
+          alert("Failed to set mode: " + text);
+        }
+      } catch (e) {
+        alert("Error setting mode: " + e);
+      }
+    }
+
     async function runServer() {
-      // Use whatever is currently selected in the UI (which should already be persisted)
-      const mode = getSelectedMode();
+      const selected = document.querySelector('input[name="server-mode"]:checked');
+      const mode = selected ? selected.value : "local";
 
       try {
         const resp = await fetch("/api/run-server", {
@@ -557,11 +501,15 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ mode }),
         });
+
         if (!resp.ok) {
           const text = await resp.text();
-          alert("Failed to start server: " + text);
-        } else {
-          await fetchStatus();
+          let msg = text;
+          try {
+            const parsed = JSON.parse(text);
+            if (parsed.detail) msg = parsed.detail;
+          } catch (_) {}
+          alert("Failed to start server:\n\n" + msg);
         }
       } catch (e) {
         alert("Error starting server: " + e);
@@ -645,38 +593,25 @@
       }
     }
 
+    // mode change -> backend immediately
+    modeLocal.addEventListener("change", () => { if (modeLocal.checked) setMode("local"); });
+    modeHpc.addEventListener("change", () => { if (modeHpc.checked) setMode("hpc"); });
+
     runBtn.addEventListener("click", runServer);
     healthBtn.addEventListener("click", runHealthCheck);
     camBtn.addEventListener("click", startCameraServer);
     xarmRunBtn.addEventListener("click", runXarm);
     xarmStopBtn.addEventListener("click", stopXarm);
 
-    // Whenever the user changes the mode, persist it to backend
-    document.querySelectorAll('input[name="server-mode"]').forEach(r => {
-      r.addEventListener("change", async (e) => {
-        await setServerMode(e.target.value);
-      });
-    });
-
-    // Initial load:
-    // - fetch status once
-    // - if no server running, force backend mode to LOCAL (your desired default)
-    // - then start polling
-    (async function init() {
-      const status = await fetchStatus();
-      await fetchCameraStatus();
-      await fetchXarmStatus();
-
-      if (status && !status.server_running) {
-        // Set backend to local default on open (silent)
-        setRadioUI("local");
-        await setServerMode("local", true);
-      }
-
-      setInterval(fetchStatus, 2000);
-      setInterval(fetchCameraStatus, 2000);
-      setInterval(fetchXarmStatus, 2000);
-    })();
+    // Poll
+    fetchStatus();
+    fetchCameraStatus();
+    fetchXarmStatus();
+    fetchPolicyLog();
+    setInterval(fetchStatus, 2000);
+    setInterval(fetchCameraStatus, 2000);
+    setInterval(fetchXarmStatus, 2000);
+    setInterval(fetchPolicyLog, 2000);
   </script>
 </body>
 </html>
