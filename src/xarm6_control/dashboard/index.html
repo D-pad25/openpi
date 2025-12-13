@@ -353,14 +353,6 @@
     els.modeHpc.checked = (value === "hpc");
   }
 
-  function classifyState(state){
-    if(!state) return "";
-    if(state.startsWith("ERROR")) return "err";
-    if(state === "READY") return "ok";
-    if(state === "IDLE") return "";
-    return "warn";
-  }
-
   async function pollStatus(){
     const s = await fetchJSON("/api/status");
 
@@ -407,9 +399,6 @@
   }
 
   function camOkFlag(obj){
-    // Support either schema:
-    // - {online: bool} (current backend)
-    // - {ok: bool, error: str} (older)
     if(!obj) return { ok: false, err: false };
     if(typeof obj.online === "boolean") return { ok: obj.online, err: !obj.online };
     if(typeof obj.ok === "boolean") return { ok: obj.ok, err: !obj.ok };
@@ -434,8 +423,6 @@
 
   async function pollLogs(){
     const p = await fetchJSON("/api/policy-server-log");
-    // Current backend returns:
-    // { local_running, local_returncode, log, mode }
     const localRunning = !!p.local_running;
     const rc = (p.local_returncode === null || typeof p.local_returncode === "undefined") ? null : p.local_returncode;
 

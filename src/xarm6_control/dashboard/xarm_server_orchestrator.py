@@ -141,6 +141,7 @@ class Orchestrator:
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
             text=True,
         )
 
@@ -217,6 +218,7 @@ class Orchestrator:
         if proc is None:
             return
         if proc.poll() is not None:
+            self.tunnel_process = None
             return
 
         try:
@@ -225,8 +227,8 @@ class Orchestrator:
                 proc.wait(timeout=2.0)
             except subprocess.TimeoutExpired:
                 proc.kill()
-        except Exception:
-            pass
+        finally:
+            self.tunnel_process = None
 
     def delete_job(self) -> Tuple[bool, str]:
         """Best-effort qdel of the current job_id (if known)."""
@@ -416,6 +418,12 @@ class Orchestrator:
                 "Cannot start tunnel: remote IP/port unknown. Did the endpoint file get created?",
             )
             return False
+
+        # If an old tunnel exists, kill it first.
+        try:
+            self.stop_tunnel()
+        except Exception:
+            pass
 
         local_port = self.config.policy_port
         remote_port = self.remote_port
