@@ -4,13 +4,13 @@ dashboard_app.py
 
 Web dashboard for:
 - Starting the XArm policy server via HPC orchestrator OR locally
-- Showing orchestrator state live (with full error diagnostics)
+- Showing orchestrator state live
 - Displaying two camera feeds (base + wrist) via MJPEG
 - Running the local xArm client with a chosen prompt
 - Capturing and exposing local policy server stdout/stderr to the UI
 - Stopping policy server:
     * LOCAL: kill local process group
-    * HPC: orch.stop() (ssh qdel + tunnel shutdown); supports early cancel before job_id exists
+    * HPC: request cancel; qdel once job_id is known; stop tunnel too
 
 Run with:
     uv run src/xarm6_control/dashboard/dashboard_app.py
@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import signal
+import sys
 import threading
 import time
 from typing import Optional, Dict, Any, List
@@ -36,14 +37,12 @@ from pydantic import BaseModel
 
 import websockets.sync.client
 
-# Import orchestrator
 from xarm6_control.dashboard.xarm_server_orchestrator import (
     Orchestrator,
     OrchestratorConfig,
     OrchestratorState,
 )
 
-# Import ZMQ camera backend
 from xarm6_control.dashboard.zmq_camera_backend import (
     ZmqCameraBackend,
     mjpeg_stream_generator,
@@ -78,25 +77,20 @@ _status_lock = threading.Lock()
 _last_status: Dict[str, Any] = {
     "state": OrchestratorState.IDLE.value,
     "message": "Idle",
-    # server_mode = what to show while busy/running; otherwise UI should use preferred_mode
-    "server_mode": ServerMode.LOCAL.value,
+    "server_mode": ServerMode.LOCAL.value,  # display mode (active if running, else preferred)
 }
 
-# Preferred mode = what user selected in UI (while idle)
+# Preferred mode = what user selected while idle
 _preferred_mode_lock = threading.Lock()
 _preferred_mode: ServerMode = ServerMode.LOCAL
 
-# Active mode = what is actually running/orchestrating. None means idle.
+# Active mode = what is actually running/orchestrating
 _active_mode_lock = threading.Lock()
 _active_mode: Optional[ServerMode] = None
 
-# "Shutdown requested" coordination for HPC if job_id not known yet
+# Cancel coordination for HPC (if job_id not known yet)
 _hpc_cancel_lock = threading.Lock()
 _hpc_cancel_requested: bool = False
-
-# Avoid multiple concurrent orch.stop() calls
-_hpc_stop_lock = threading.Lock()
-_hpc_stop_in_progress: bool = False
 
 # Camera server process
 _camera_server_lock = threading.Lock()
@@ -113,13 +107,16 @@ _local_server_process: Optional[subprocess.Popen] = None
 _local_server_log_lock = threading.Lock()
 _local_server_log_lines: List[str] = []
 _local_server_returncode: Optional[int] = None
-_MAX_LOCAL_SERVER_LOG_LINES = 800
+_MAX_LOCAL_SERVER_LOG_LINES = 500
+
+_local_start_thread: Optional[threading.Thread] = None
+_local_start_thread_lock = threading.Lock()
 
 # xArm client process + logs
 _xarm_lock = threading.Lock()
 _xarm_process: Optional[subprocess.Popen] = None
 _xarm_log_lines: List[str] = []
-_MAX_XARM_LOG_LINES = 400
+_MAX_XARM_LOG_LINES = 200
 
 
 # ============================================================
@@ -193,6 +190,11 @@ def _local_server_running() -> bool:
         return _local_server_process is not None and _local_server_process.poll() is None
 
 
+def _local_starting() -> bool:
+    with _local_start_thread_lock:
+        return _local_start_thread is not None and _local_start_thread.is_alive()
+
+
 def _any_server_running_or_busy() -> bool:
     with _orch_thread_lock:
         hpc_thread_alive = _orch_thread is not None and _orch_thread.is_alive()
@@ -201,7 +203,7 @@ def _any_server_running_or_busy() -> bool:
     hpc_ready = orch is not None and orch.state == OrchestratorState.READY
     local_ready = _local_server_running()
 
-    return hpc_thread_alive or hpc_ready or local_ready
+    return hpc_thread_alive or _local_starting() or hpc_ready or local_ready
 
 
 # ============================================================
@@ -229,10 +231,17 @@ def _wait_for_local_server_healthy(proc: subprocess.Popen, timeout_s: float = 24
     while time.time() < deadline:
         ret = proc.poll()
         if ret is not None:
+            # pull any remaining buffered output
+            try:
+                out, _ = proc.communicate(timeout=1.0)
+            except Exception:
+                out = ""
+            if out:
+                for line in out.splitlines():
+                    _append_local_server_log(line)
             _set_local_server_returncode(ret)
             raise RuntimeError(
-                f"Local policy server exited during startup (rc={ret}). "
-                f"Check Policy Server Log for traceback/checkpoint errors."
+                f"Local policy server exited during startup (rc={ret}).\n\n{out or '<no output>'}"
             )
 
         ok, msg = _ws_health_once(port, timeout_s=2.0)
@@ -246,7 +255,7 @@ def _wait_for_local_server_healthy(proc: subprocess.Popen, timeout_s: float = 24
 
 
 # ============================================================
-# HPC cancel orchestration
+# HPC cancel coordination
 # ============================================================
 
 def _set_hpc_cancel_requested(v: bool) -> None:
@@ -260,73 +269,68 @@ def _get_hpc_cancel_requested() -> bool:
         return _hpc_cancel_requested
 
 
-def _set_hpc_stop_in_progress(v: bool) -> None:
-    global _hpc_stop_in_progress
-    with _hpc_stop_lock:
-        _hpc_stop_in_progress = v
-
-
-def _get_hpc_stop_in_progress() -> bool:
-    with _hpc_stop_lock:
-        return _hpc_stop_in_progress
-
-
-def _stop_hpc_orchestrator(reason: str) -> None:
-    """
-    Call orch.stop() safely exactly once.
-    orch.stop() will:
-      - request_cancel()
-      - stop ssh tunnel
-      - ssh qdel job_id (if known)
-      - emit STOPPING -> CANCELLED with detailed debug info
-    """
-    orch = _orchestrator
-    if orch is None:
-        _set_status("ERROR_STOP", "No orchestrator instance exists to stop.", server_mode=ServerMode.HPC)
-        return
-
-    if _get_hpc_stop_in_progress():
-        return
-
-    _set_hpc_stop_in_progress(True)
-    try:
-        _set_status("STOPPING", f"{reason}\n\nCalling orchestrator.stop() ...", server_mode=ServerMode.HPC)
-        orch.stop()
-        # orch.stop emits states/messages via callback too
-    finally:
-        _set_hpc_stop_in_progress(False)
-        _set_active_mode(None)
-
-
 def _attempt_cancel_hpc_if_requested() -> None:
     """
-    If cancel was requested and we now have a job_id, call orch.stop().
-    This is called from _on_state_change (so we catch the moment job_id appears).
+    If cancel was requested and we now have a job_id, delete it (via orchestrator SSH)
+    and stop the tunnel too. Safe to call from orchestrator callback.
     """
     if not _get_hpc_cancel_requested():
         return
+
     orch = _orchestrator
     if orch is None:
         return
 
     job_id = getattr(orch, "job_id", None)
     if not job_id:
-        # still waiting for job id to exist
         return
 
-    # Clear flag *before* stopping to prevent repeated stop calls on subsequent state emissions
+    # Make sure the orchestrator stops its loops ASAP
+    try:
+        orch.request_cancel()
+    except Exception:
+        pass
+
+    # Stop tunnel (local)
+    try:
+        orch.stop_tunnel()
+    except Exception:
+        pass
+
+    # Delete job (remote, via ssh aqua)
+    ok, msg = orch.delete_job()
+
     _set_hpc_cancel_requested(False)
-    _stop_hpc_orchestrator(f"Shutdown requested (job_id now available: {job_id}).")
+    _set_active_mode(None)
+    _set_status(
+        OrchestratorState.IDLE.value,
+        f"HPC job cancelled: {job_id}\n\n{msg}",
+        server_mode=ServerMode.HPC,
+    )
 
 
 # ============================================================
-# Orchestrator callback
+# Orchestrator callback + thread start
 # ============================================================
 
 def _on_state_change(state: OrchestratorState, message: str) -> None:
     _set_status(state.value, message, server_mode=ServerMode.HPC)
     print(f"[DASHBOARD][HPC] {state.value}: {message}")
+
+    # If the user hit Shutdown while we're starting, cancel as soon as job_id appears
     _attempt_cancel_hpc_if_requested()
+
+    # If we reach a terminal error/cancel state, clear active mode
+    if state in {
+        OrchestratorState.CANCELLED,
+        OrchestratorState.ERROR_JOB_SUBMISSION,
+        OrchestratorState.ERROR_JOB_STARTUP,
+        OrchestratorState.ERROR_TUNNEL_START,
+        OrchestratorState.ERROR_SERVER_UNHEALTHY,
+        OrchestratorState.ERROR_TUNNEL_BROKEN,
+        OrchestratorState.ERROR_STOP,
+    }:
+        _set_active_mode(None)
 
 
 def _start_orchestrator_thread() -> bool:
@@ -344,11 +348,10 @@ def _start_orchestrator_thread() -> bool:
         orch.on_state_change = _on_state_change
         _orchestrator = orch
 
-        def _run() -> None:
+        def _run():
             try:
                 orch.run_full_sequence()
             finally:
-                # Thread ends naturally. UI can observe state via /api/status
                 pass
 
         t = threading.Thread(target=_run, daemon=True)
@@ -358,10 +361,11 @@ def _start_orchestrator_thread() -> bool:
 
 
 # ============================================================
-# Local policy server start/stop (with logs + kill group)
+# Local policy server start/stop (logs + kill group)
 # ============================================================
 
 def _local_server_log_reader(proc: subprocess.Popen) -> None:
+    global _local_server_process
     try:
         assert proc.stdout is not None
         for line in proc.stdout:
@@ -373,13 +377,16 @@ def _local_server_log_reader(proc: subprocess.Popen) -> None:
         _set_local_server_returncode(rc)
         _append_local_server_log(f"[dashboard] Local policy server exited with return code {rc}")
 
+        with _local_server_lock:
+            _local_server_process = None
+
         if _get_active_mode() == ServerMode.LOCAL:
             _set_active_mode(None)
 
         if rc != 0:
             _set_status(
                 "ERROR_LOCAL_EXIT",
-                f"Local policy server exited (rc={rc}). See Policy Server Log for traceback/checkpoint path.",
+                f"Local policy server exited (rc={rc}). See Policy Server Log.",
                 server_mode=ServerMode.LOCAL,
             )
         else:
@@ -390,7 +397,7 @@ def _local_server_log_reader(proc: subprocess.Popen) -> None:
             )
 
 
-def _start_local_policy_server() -> None:
+def _start_local_policy_server_blocking() -> None:
     global _local_server_process
 
     with _local_server_lock:
@@ -403,9 +410,10 @@ def _start_local_policy_server() -> None:
 
     _set_status("STARTING_LOCAL", "Starting local policy server...", server_mode=ServerMode.LOCAL)
 
+    # IMPORTANT: avoid nested `uv run ...` from a process already started by uv
     cmd = [
-        "uv",
-        "run",
+        sys.executable,
+        "-u",
         "scripts/serve_policy.py",
         "--env",
         "DEMO",
@@ -445,6 +453,27 @@ def _start_local_policy_server() -> None:
     )
 
 
+def _start_local_policy_server_async() -> bool:
+    global _local_start_thread
+
+    with _local_start_thread_lock:
+        if _local_start_thread is not None and _local_start_thread.is_alive():
+            return False
+        if _local_server_running():
+            return False
+
+        def _run():
+            try:
+                _start_local_policy_server_blocking()
+            except Exception as e:
+                _set_active_mode(None)
+                _set_status("ERROR_LOCAL_START", f"Local server failed to start.\n\n{e}", server_mode=ServerMode.LOCAL)
+
+        _local_start_thread = threading.Thread(target=_run, daemon=True)
+        _local_start_thread.start()
+        return True
+
+
 def _stop_local_policy_server() -> tuple[bool, str]:
     global _local_server_process
 
@@ -461,7 +490,8 @@ def _stop_local_policy_server() -> tuple[bool, str]:
     except Exception as e:
         return False, f"Failed to SIGTERM local server group: {e}"
 
-    for _ in range(20):
+    # Give it a moment then SIGKILL if needed
+    for _ in range(20):  # ~2s
         if proc.poll() is not None:
             break
         time.sleep(0.1)
@@ -472,6 +502,9 @@ def _stop_local_policy_server() -> tuple[bool, str]:
         except Exception as e:
             return False, f"Failed to SIGKILL local server group: {e}"
 
+    with _local_server_lock:
+        _local_server_process = None
+
     _set_active_mode(None)
     _set_status(OrchestratorState.IDLE.value, "Local policy server stopped.", server_mode=ServerMode.LOCAL)
     return True, "Local policy server stopped."
@@ -481,8 +514,8 @@ def _stop_local_policy_server() -> tuple[bool, str]:
 # Camera backends
 # ============================================================
 
-base_camera = ZmqCameraBackend(host="172.23.224.1", port=5000, img_size=None, name="base", target_fps=15.0)
-wrist_camera = ZmqCameraBackend(host="172.23.224.1", port=5001, img_size=None, name="wrist", target_fps=15.0)
+base_camera = ZmqCameraBackend(host="127.0.0.1", port=5000, img_size=None, name="base", target_fps=15.0)
+wrist_camera = ZmqCameraBackend(host="127.0.0.1", port=5001, img_size=None, name="wrist", target_fps=15.0)
 
 # ============================================================
 # HTML Frontend
@@ -490,6 +523,7 @@ wrist_camera = ZmqCameraBackend(host="172.23.224.1", port=5001, img_size=None, n
 
 _INDEX_PATH = Path(__file__).with_name("index.html")
 INDEX_HTML = _INDEX_PATH.read_text(encoding="utf-8")
+
 
 # ============================================================
 # Request models
@@ -535,20 +569,23 @@ def api_status() -> Dict[str, Any]:
     with _orch_thread_lock:
         hpc_thread_alive = _orch_thread is not None and _orch_thread.is_alive()
 
+    local_thread_alive = _local_starting()
+
     orch = _orchestrator
     hpc_ready = orch is not None and orch.state == OrchestratorState.READY
     local_ready = _local_server_running()
 
     server_running = bool(hpc_ready or local_ready)
-
-    # Busy means: orchestration thread is alive OR we’re in a transient non-IDLE state but not READY and not error
-    idle_like = {OrchestratorState.IDLE.value, OrchestratorState.READY.value, OrchestratorState.CANCELLED.value}
-    busy = bool(hpc_thread_alive or (state not in idle_like and not state.startswith("ERROR") and not server_running))
+    busy = bool(hpc_thread_alive or local_thread_alive)
 
     # Job/tunnel info only meaningful in HPC mode
     job_id = getattr(orch, "job_id", None) if orch is not None else None
     remote_ip = getattr(orch, "remote_ip", None) if orch is not None else None
     remote_port = getattr(orch, "remote_port", None) if orch is not None else None
+    if server_mode == ServerMode.LOCAL.value:
+        job_id = None
+        remote_ip = None
+        remote_port = None
 
     return {
         "state": state,
@@ -572,18 +609,23 @@ def api_policy_server_log() -> Dict[str, Any]:
     with _local_server_log_lock:
         log = "\n".join(_local_server_log_lines)
         rc = _local_server_returncode
-
-    orch = _orchestrator
-    hpc_state = orch.state.value if orch is not None else None
-    hpc_message = orch.last_message if orch is not None else None
-
     return {
+        "mode": _get_display_mode().value,
         "local_running": _local_server_running(),
         "local_returncode": rc,
-        "local_log": log,
-        "hpc_state": hpc_state,
-        "hpc_message": hpc_message,
+        "log": log,
     }
+
+
+@app.get("/api/hpc-diagnostics", response_class=JSONResponse)
+def api_hpc_diagnostics() -> Dict[str, Any]:
+    orch = _orchestrator
+    if orch is None:
+        return {"ok": False, "diagnostics": "Orchestrator not initialized yet."}
+    try:
+        return {"ok": True, "diagnostics": orch.collect_diagnostics()}
+    except Exception as e:
+        return {"ok": False, "diagnostics": f"Failed to collect diagnostics: {e}"}
 
 
 @app.post("/api/run-server", response_class=JSONResponse)
@@ -604,16 +646,13 @@ def api_run_server(req: RunServerRequest) -> Dict[str, Any]:
             raise HTTPException(status_code=409, detail="Server orchestration already running or server already READY.")
         return {"status": "started", "mode": "hpc"}
 
-    # LOCAL
+    # LOCAL (async so the dashboard doesn't die/block)
     _set_active_mode(ServerMode.LOCAL)
-    try:
-        _start_local_policy_server()
-    except RuntimeError as e:
+    started = _start_local_policy_server_async()
+    if not started:
         _set_active_mode(None)
-        _set_status("ERROR_LOCAL_START", f"Local server failed to start.\n\n{e}", server_mode=ServerMode.LOCAL)
-        raise HTTPException(status_code=500, detail=str(e))
-
-    return {"status": "started", "mode": "local"}
+        raise HTTPException(status_code=409, detail="Local server is already starting or running.")
+    return {"status": "starting", "mode": "local"}
 
 
 @app.post("/api/stop-server", response_class=JSONResponse)
@@ -621,8 +660,7 @@ def api_stop_server() -> Dict[str, Any]:
     """
     Stop whichever server is active (or cancel startup):
     - LOCAL: kill local process group
-    - HPC: orch.stop(); if job_id not yet known, set cancel_requested and orch.request_cancel()
-           then callback will call orch.stop() as soon as job_id appears.
+    - HPC: request cancel; delete job once job_id is known; stop tunnel too
     """
     mode = _get_active_mode() or _get_display_mode()
 
@@ -634,29 +672,24 @@ def api_stop_server() -> Dict[str, Any]:
 
     # HPC stop/cancel
     orch = _orchestrator
-    if orch is None:
-        # If user hits stop before any HPC run began
-        _set_status("ERROR_STOP", "No orchestrator exists yet. Start HPC server first.", server_mode=ServerMode.HPC)
-        raise HTTPException(status_code=400, detail="No orchestrator exists yet.")
-
     _set_active_mode(ServerMode.HPC)
-    _set_status("CANCEL_REQUESTED", "Shutdown requested for HPC server/job...", server_mode=ServerMode.HPC)
+    _set_hpc_cancel_requested(True)
+    _set_status("CANCEL_REQUESTED", "Cancelling HPC server/job...", server_mode=ServerMode.HPC)
 
-    job_id = getattr(orch, "job_id", None)
-    if not job_id:
-        # Early cancel: request cancel now, and stop when job_id becomes available
-        _set_hpc_cancel_requested(True)
-        orch.request_cancel()
-        return {
-            "status": "cancelling",
-            "mode": "hpc",
-            "detail": "Cancel requested. Waiting for job_id to become available; then orchestrator.stop() will qdel the job and close the tunnel.",
-        }
+    if orch is not None:
+        try:
+            orch.request_cancel()
+        except Exception:
+            pass
 
-    # We have job_id now: stop immediately
-    _set_hpc_cancel_requested(False)
-    _stop_hpc_orchestrator(f"Shutdown requested (job_id: {job_id}).")
-    return {"status": "stopping", "mode": "hpc", "detail": f"Stopping HPC job {job_id} (qdel via ssh) and tunnel."}
+    # If job_id already known, cancel immediately
+    _attempt_cancel_hpc_if_requested()
+
+    return {
+        "status": "cancelling",
+        "mode": "hpc",
+        "detail": "Cancel requested. If job_id is already known it will be qdel'd immediately; otherwise it will be deleted as soon as it appears.",
+    }
 
 
 @app.get("/api/health", response_class=JSONResponse)
@@ -788,6 +821,7 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
         _append_xarm_log(f"[dashboard] Prompt: {prompt}")
 
         def _xarm_log_reader(p: subprocess.Popen) -> None:
+            global _xarm_process
             try:
                 assert p.stdout is not None
                 for line in p.stdout:
@@ -797,6 +831,9 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
             finally:
                 rc = p.wait()
                 _append_xarm_log(f"[dashboard] xArm client exited with return code {rc}")
+                with _xarm_lock:
+                    if _xarm_process is p:
+                        _xarm_process = None
 
         threading.Thread(target=_xarm_log_reader, args=(proc,), daemon=True).start()
 

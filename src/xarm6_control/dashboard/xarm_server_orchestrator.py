@@ -49,7 +49,8 @@ class OrchestratorConfig:
     policy_port: int = 8000
 
     # Endpoint file on HPC (written by your remote job)
-    endpoint_file: str = "~/.openpi_policy_endpoint"
+    # IMPORTANT: use $HOME so it expands even when quoted.
+    endpoint_file: str = "$HOME/.openpi_policy_endpoint"
 
     # How long to wait for the endpoint file to appear
     wait_endpoint_timeout_s: int = 500
@@ -148,6 +149,26 @@ class Orchestrator:
         cmd = ["ssh", self.config.hpc_prefix, remote_cmd]
         return self._run_local(cmd, check=check)
 
+    # --- remote path quoting helpers (CRITICAL for $HOME/~/ expansion) ---
+
+    def _remote_path(self, p: str) -> str:
+        """
+        Normalize "~/" to "$HOME/" so it expands even if we quote it.
+        """
+        if p.startswith("~/"):
+            return "$HOME/" + p[2:]
+        if p == "~":
+            return "$HOME"
+        return p
+
+    def _dq(self, s: str) -> str:
+        """
+        Double-quote for remote shell. Allows $HOME expansion.
+        """
+        return '"' + s.replace('"', '\\"') + '"'
+
+    # --------------- diagnostics ---------------
+
     def _best_effort(self, label: str, fn) -> str:
         """Run fn() and return stdout/stderr as a debug block without raising."""
         try:
@@ -175,11 +196,15 @@ class Orchestrator:
             blocks.append(self._best_effort("qstat -f", lambda: self._ssh_hpc(f"qstat -f {jid} 2>&1 || true", check=False)))
             blocks.append(self._best_effort("qpeek", lambda: self._ssh_hpc(f"qpeek {jid} 2>&1 || true", check=False)))
 
-        ef = shlex.quote(self.config.endpoint_file)
+        ef = self._dq(self._remote_path(self.config.endpoint_file))
         blocks.append(self._best_effort("endpoint ls", lambda: self._ssh_hpc(f"ls -l {ef} 2>&1 || true", check=False)))
         blocks.append(self._best_effort("endpoint cat", lambda: self._ssh_hpc(f"cat {ef} 2>&1 || true", check=False)))
 
         return "\n\n".join(blocks).strip()
+
+    def collect_diagnostics(self) -> str:
+        """Public wrapper for dashboard."""
+        return self._collect_hpc_diagnostics()
 
     # --------------- tunnel / job control ---------------
 
@@ -222,7 +247,10 @@ class Orchestrator:
         - qdel job (if known)
         """
         self.request_cancel()
-        self._emit_state(OrchestratorState.STOPPING, "Stopping: cancelling orchestration, shutting down tunnel, deleting HPC job...")
+        self._emit_state(
+            OrchestratorState.STOPPING,
+            "Stopping: cancelling orchestration, shutting down tunnel, deleting HPC job...",
+        )
 
         debug: list[str] = []
 
@@ -248,13 +276,16 @@ class Orchestrator:
     # --------------- small utility steps ---------------
 
     def clear_remote_endpoint_file(self) -> None:
-        """Remove any stale ~/.openpi_policy_endpoint on the HPC."""
+        """Remove any stale endpoint file on the HPC."""
         if self._cancelled():
             return
 
-        self._emit_state(OrchestratorState.CLEARING_OLD_ENDPOINT, "Removing old endpoint file on HPC (if any)...")
+        self._emit_state(
+            OrchestratorState.CLEARING_OLD_ENDPOINT,
+            "Removing old endpoint file on HPC (if any)...",
+        )
         try:
-            ef = shlex.quote(self.config.endpoint_file)
+            ef = self._dq(self._remote_path(self.config.endpoint_file))
             self._ssh_hpc(f"rm -f {ef} 2>&1 || true", check=False)
         except Exception as e:
             # Non-fatal
@@ -301,7 +332,6 @@ class Orchestrator:
                 job_id = c
                 break
         if job_id is None and candidates:
-            # last resort: accept numeric-only
             job_id = candidates[-1]
 
         self.job_id = job_id
@@ -316,7 +346,7 @@ class Orchestrator:
         return True
 
     def wait_for_endpoint(self) -> bool:
-        """Poll the HPC for ~/.openpi_policy_endpoint until it appears or timeout."""
+        """Poll the HPC for endpoint file until it appears or timeout."""
         if self._cancelled():
             self._emit_state(OrchestratorState.CANCELLED, "Cancelled before waiting for endpoint.")
             return False
@@ -327,7 +357,7 @@ class Orchestrator:
         )
 
         deadline = time.time() + self.config.wait_endpoint_timeout_s
-        ef = shlex.quote(self.config.endpoint_file)
+        ef = self._dq(self._remote_path(self.config.endpoint_file))
 
         while time.time() < deadline:
             if self._cancelled():
@@ -367,7 +397,6 @@ class Orchestrator:
 
             time.sleep(self.config.wait_endpoint_poll_s)
 
-        # timeout: attach diagnostics
         msg = f"Timed out waiting for endpoint file ({self.config.wait_endpoint_timeout_s}s)."
         diag = self._collect_hpc_diagnostics()
         if diag:
@@ -412,7 +441,7 @@ class Orchestrator:
             self._emit_state(OrchestratorState.ERROR_TUNNEL_START, f"Failed to start tunnel: {e}")
             return False
 
-        # Detect immediate failure (bad key, port in use, etc.)
+        # Detect immediate failure
         time.sleep(self.config.tunnel_start_grace_s)
         if proc.poll() is not None:
             try:
@@ -430,7 +459,7 @@ class Orchestrator:
         self.tunnel_process = proc
         return True
 
-    # -------- health checking (single-shot + retrying) --------
+    # -------- health checking --------
 
     def _check_policy_health_once(self) -> Tuple[bool, str, str]:
         """
@@ -471,7 +500,7 @@ class Orchestrator:
             self._emit_state(OrchestratorState.READY, "Policy server and tunnel are healthy (WebSocket handshake succeeded).")
             return True
 
-        # If tunnel process died, surface its stderr
+        # If tunnel died, attach its stderr
         if kind == "tunnel" and self.tunnel_process is not None and self.tunnel_process.poll() is not None:
             try:
                 out, err = self.tunnel_process.communicate(timeout=1.0)
@@ -492,9 +521,7 @@ class Orchestrator:
         return False
 
     def wait_for_server_healthy(self) -> bool:
-        """
-        Retry health checks until the server becomes healthy or we hit a timeout.
-        """
+        """Retry health checks until healthy or timeout."""
         timeout = self.config.server_health_timeout_s
         poll = self.config.server_health_poll_s
 
@@ -521,7 +548,6 @@ class Orchestrator:
             last_msg = msg
             time.sleep(poll)
 
-        # Timed out; include HPC diagnostics (super useful when checkpoints fail)
         msg = f"Server never became healthy within {timeout}s (last error [{last_kind}]: {last_msg})"
         diag = self._collect_hpc_diagnostics()
         if diag:
@@ -538,13 +564,13 @@ class Orchestrator:
 
     def run_full_sequence(self) -> None:
         """
-        Full sequence for a “Run server” button:
+        Full sequence for “Run server”:
 
-        1. Clear old endpoint file on HPC
-        2. Submit job (serve-policy) via pipeline script
-        3. Wait for endpoint file on HPC
-        4. Start SSH tunnel
-        5. Wait for WebSocket health with retries
+        1) Clear old endpoint file on HPC
+        2) Submit job via pipeline script
+        3) Wait for endpoint file
+        4) Start SSH tunnel
+        5) Wait for WebSocket health
         """
         self._emit_state(OrchestratorState.IDLE, "Starting orchestration sequence...")
 
@@ -569,14 +595,12 @@ class Orchestrator:
         if not self.start_tunnel():
             return
 
-        # Give the tunnel a moment
         time.sleep(1.0)
-
         self.wait_for_server_healthy()
 
 
 # ============================
-# Simple CLI interface
+# CLI
 # ============================
 
 def main() -> None:
