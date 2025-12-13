@@ -23,7 +23,7 @@ class ZmqCameraBackend:
 
     def __init__(
         self,
-        host: str = "172.23.224.1",
+        host: str = "127.0.0.1",
         port: int = 5000,
         img_size: Optional[Tuple[int, int]] = None,
         name: str = "camera",
