@@ -81,7 +81,7 @@ _status_lock = threading.Lock()
 _last_status: Dict[str, Any] = {
     "state": OrchestratorState.IDLE.value,
     "message": "Idle",
-    "server_mode": ServerMode.HPC.value,  # default to HPC
+    "server_mode": ServerMode.LOCAL.value,  # default to LOCAL
 }
 
 # Track which mode we're in for the policy server
@@ -153,7 +153,7 @@ def _on_state_change(state: OrchestratorState, message: str) -> None:
     with _status_lock:
         _last_status["state"] = state.value
         _last_status["message"] = message
-        _last_status["server_mode"] = _server_mode.value  # <-- don't hardcode HPC
+        _last_status["server_mode"] = _server_mode.value
     print(f"[DASHBOARD][{_server_mode.value.upper()}] {state.value}: {message}")
 
 
