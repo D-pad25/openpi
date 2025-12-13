@@ -1,556 +1,617 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>XArm6 Demo Dashboard</title>
   <style>
-    :root{
-      --bg:#0b1220;
-      --panel:#0f172a;
-      --panel2:#0b1326;
-      --text:#e5e7eb;
-      --muted:#9ca3af;
-      --border:#1f2937;
-      --ok:#22c55e;
-      --warn:#f59e0b;
-      --err:#ef4444;
-      --btn:#111827;
-      --btn2:#0b1b35;
-      --accent:#60a5fa;
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      --sans: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
     }
-    html,body{height:100%;}
-    body{
-      margin:0;
-      font-family:var(--sans);
-      background:linear-gradient(180deg, #070b14, var(--bg));
-      color:var(--text);
+    header {
+      padding: 16px 24px;
+      background: #020617;
+      border-bottom: 1px solid #1f2937;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
-    header{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:16px;
-      padding:14px 18px;
-      border-bottom:1px solid var(--border);
-      background:rgba(2,6,23,.7);
-      position:sticky;
-      top:0;
-      z-index:10;
-      backdrop-filter: blur(8px);
+    header h1 { margin: 0; font-size: 1.3rem; }
+    main {
+      flex: 1;
+      padding: 16px 24px 24px;
+      display: grid;
+      grid-template-columns: 2fr 1.3fr;
+      grid-gap: 16px;
     }
-    header h1{
-      margin:0;
-      font-size:16px;
-      font-weight:650;
-      letter-spacing:.2px;
+    .card {
+      background: #020617;
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid #1f2937;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.45);
     }
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
-    .pill{
-      padding:4px 10px;
-      border:1px solid var(--border);
-      border-radius:999px;
-      background:rgba(15,23,42,.6);
-      font-size:12px;
-      color:var(--muted);
+    .card h2 { margin-top: 0; font-size: 1.1rem; margin-bottom: 8px; }
+
+    .cams-grid { display: grid; grid-template-columns: 1fr 1fr; grid-gap: 8px; }
+    .cam-box {
+      border-radius: 10px;
+      overflow: hidden;
+      background: #020617;
+      border: 1px solid #1f2937;
+      display: flex;
+      flex-direction: column;
     }
-    .pill strong{color:var(--text); font-weight:650;}
-    main{
-      padding:16px 18px 22px;
-      display:grid;
-      grid-template-columns: 1.4fr 1fr;
-      gap:14px;
+    .cam-box-header {
+      padding: 6px 10px;
+      font-size: 0.85rem;
+      border-bottom: 1px solid #1f2937;
+      background: #050816;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
-    .card{
-      background:rgba(15,23,42,.7);
-      border:1px solid var(--border);
-      border-radius:14px;
-      padding:14px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    .cam-box img {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: #111827;
     }
-    .card h2{
-      margin:0 0 10px 0;
-      font-size:13px;
-      font-weight:700;
-      color:#dbeafe;
-      letter-spacing:.2px;
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      border: 1px solid #1f2937;
     }
-    .sub{
-      font-size:12px;
-      color:var(--muted);
-      margin-top:-6px;
-      margin-bottom:10px;
+    .status-dot { width: 8px; height: 8px; border-radius: 999px; }
+    .status-idle { background: #4b5563; }
+    .status-busy { background: #fbbf24; }
+    .status-ready { background: #22c55e; }
+    .status-error { background: #ef4444; }
+
+    button {
+      border-radius: 999px;
+      padding: 8px 16px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
-    .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
-    button{
-      appearance:none;
-      border:1px solid var(--border);
-      background:linear-gradient(180deg, var(--btn2), var(--btn));
-      color:var(--text);
-      border-radius:10px;
-      padding:9px 12px;
-      font-size:12px;
-      font-weight:650;
-      cursor:pointer;
+    button.primary {
+      background: linear-gradient(to right, #22c55e, #14b8a6);
+      color: #020617;
     }
-    button:hover{border-color:#334155;}
-    button:disabled{
-      opacity:.5;
-      cursor:not-allowed;
+    button.secondary {
+      background: #020617;
+      border: 1px solid #374151;
+      color: #e5e7eb;
     }
-    .btnDanger{border-color:rgba(239,68,68,.35);}
-    .btnDanger:hover{border-color:rgba(239,68,68,.6);}
-    .btnOk{border-color:rgba(34,197,94,.35);}
-    .btnOk:hover{border-color:rgba(34,197,94,.6);}
-    .input, textarea{
-      width:100%;
-      box-sizing:border-box;
-      border:1px solid var(--border);
-      background:rgba(2,6,23,.45);
-      color:var(--text);
-      border-radius:10px;
-      padding:9px 10px;
-      font-size:12px;
-      outline:none;
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .log {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      background: #020617;
+      border-radius: 8px;
+      border: 1px solid #1f2937;
+      padding: 8px;
+      font-size: 0.78rem;
+      max-height: 220px;
+      overflow-y: auto;
+      white-space: pre-wrap;
     }
-    textarea{min-height:70px; font-family:var(--sans);}
-    .kv{display:grid; grid-template-columns: 120px 1fr; gap:6px 10px; font-size:12px; margin-top:6px;}
-    .kv div{color:var(--muted);}
-    .kv div b{color:var(--text); font-weight:650;}
-    .statusLine{
-      padding:10px;
-      border-radius:12px;
-      border:1px solid var(--border);
-      background:rgba(2,6,23,.35);
-      font-family:var(--mono);
-      font-size:12px;
-      white-space:pre-wrap;
-      word-break:break-word;
-      max-height:260px;
-      overflow:auto;
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 8px 0;
+      font-size: 0.8rem;
+      color: #9ca3af;
     }
-    .logBox{
-      margin-top:10px;
-      padding:10px;
-      border-radius:12px;
-      border:1px solid var(--border);
-      background:rgba(2,6,23,.35);
-      font-family:var(--mono);
-      font-size:12px;
-      white-space:pre;
-      overflow:auto;
-      max-height:320px;
+    .meta-row span {
+      border-radius: 999px;
+      padding: 3px 10px;
+      background: #020617;
+      border: 1px solid #111827;
     }
-    .badge{font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); color:var(--muted);}
-    .ok{color:var(--ok);}
-    .warn{color:var(--warn);}
-    .err{color:var(--err);}
-    .imgWrap{
-      border:1px solid var(--border);
-      border-radius:12px;
-      overflow:hidden;
-      background:rgba(2,6,23,.35);
+
+    footer {
+      padding: 8px 16px;
+      font-size: 0.75rem;
+      color: #6b7280;
+      background: #020617;
+      border-top: 1px solid #111827;
+      text-align: right;
     }
-    .imgWrap header{
-      position:unset;
-      background:transparent;
-      border:0;
-      padding:8px 10px;
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:10px;
+
+    .cam-status {
+      font-size: 0.75rem;
+      margin-left: 8px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
     }
-    .imgWrap header .t{font-size:12px; color:#dbeafe; font-weight:700;}
-    .imgWrap img{
-      width:100%;
-      height:auto;
-      display:block;
-      background:#000;
+    .cam-online { background: #14532d; color: #bbf7d0; }
+    .cam-offline { background: #450a0a; color: #fecaca; }
+
+    .right-col { display: flex; flex-direction: column; gap: 16px; }
+
+    .xarm-controls label {
+      display: block;
+      font-size: 0.8rem;
+      margin-bottom: 4px;
+      color: #9ca3af;
     }
-    .radioRow{display:flex; gap:10px; align-items:center; font-size:12px; color:var(--muted);}
-    .toast{
-      position:fixed;
-      bottom:14px;
-      left:14px;
-      max-width:520px;
-      padding:10px 12px;
-      border-radius:12px;
-      border:1px solid var(--border);
-      background:rgba(2,6,23,.85);
-      color:var(--text);
-      font-size:12px;
-      box-shadow:0 10px 24px rgba(0,0,0,.35);
-      display:none;
-      white-space:pre-wrap;
-      z-index:999;
+    #xarm-prompt {
+      width: 100%;
+      min-height: 60px;
+      resize: vertical;
+      border-radius: 8px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      color: #e5e7eb;
+      padding: 6px 8px;
+      font-size: 0.85rem;
+      font-family: inherit;
     }
+    .xarm-buttons { display: flex; align-items: center; gap: 8px; margin-top: 8px; margin-bottom: 8px; }
+    .xarm-status-pill { font-size: 0.75rem; padding: 3px 10px; border-radius: 999px; border: 1px solid #1f2937; }
+    .xarm-status-idle { background: #111827; color: #e5e7eb; }
+    .xarm-status-running { background: #14532d; color: #bbf7d0; }
+    .xarm-status-ok { background: #0f766e; color: #a5f3fc; }
+    .xarm-status-error { background: #450a0a; color: #fecaca; }
+    .xarm-log-header { font-size: 0.8rem; color: #9ca3af; margin-bottom: 4px; }
+
+    .mode-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      font-size: 0.8rem;
+    }
+    .mode-toggle span.label {
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.7rem;
+      color: #9ca3af;
+    }
+    .mode-toggle label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .mode-toggle input[type="radio"] { accent-color: #22c55e; }
   </style>
 </head>
+
 <body>
-
-<header>
-  <h1>XArm6 Demo Dashboard</h1>
-  <div class="row">
-    <span class="pill">Mode: <strong id="pillMode">—</strong></span>
-    <span class="pill">State: <strong id="pillState">—</strong></span>
-    <span class="pill">Running: <strong id="pillRunning">—</strong></span>
-  </div>
-</header>
-
-<main>
-  <section class="card">
-    <h2>Cameras</h2>
-    <div class="sub">Base + wrist MJPEG feeds (via ZMQ backend)</div>
-
-    <div class="row" style="justify-content:space-between;">
-      <div class="row">
-        <span class="badge" id="camBadge">camera: —</span>
+  <header>
+    <h1>XArm6 Policy Server Dashboard</h1>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <div class="mode-toggle">
+        <span class="label">Mode</span>
+        <label>
+          <input id="mode-local" type="radio" name="server-mode" value="local" checked>
+          Local
+        </label>
+        <label>
+          <input id="mode-hpc" type="radio" name="server-mode" value="hpc">
+          HPC
+        </label>
       </div>
-      <div class="row">
-        <button class="btnOk" id="btnStartCameras">Start Cameras</button>
+
+      <button id="run-btn" class="primary">▶ Run Policy Server</button>
+      <button id="health-btn" class="secondary">❤️ Check Health</button>
+      <button id="cam-btn" class="secondary">📷 Start Camera Server</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left: cameras -->
+    <section class="card">
+      <h2>Camera Feeds</h2>
+      <div class="cams-grid">
+        <div class="cam-box">
+          <div class="cam-box-header">
+            <span>Base Camera</span>
+            <span class="cam-status cam-offline" id="base-status">DISCONNECTED</span>
+          </div>
+          <img src="/video/base" alt="Base camera stream" />
+        </div>
+        <div class="cam-box">
+          <div class="cam-box-header">
+            <span>Wrist Camera</span>
+            <span class="cam-status cam-offline" id="wrist-status">DISCONNECTED</span>
+          </div>
+          <img src="/video/wrist" alt="Wrist camera stream" />
+        </div>
       </div>
+    </section>
+
+    <!-- Right column -->
+    <div class="right-col">
+      <section class="card">
+        <h2>Server & Tunnel Status</h2>
+        <div id="status-chip" class="status-chip">
+          <div id="status-dot" class="status-dot status-idle"></div>
+          <span id="status-text">IDLE</span>
+        </div>
+
+        <div class="meta-row">
+          <span id="meta-job">Job: —</span>
+          <span id="meta-remote">Remote: —</span>
+          <span id="meta-server">Server: NOT RUNNING</span>
+        </div>
+
+        <div style="margin-top: 8px; font-size: 0.8rem; color: #9ca3af;">
+          <strong>Last message:</strong>
+        </div>
+        <div id="last-message" class="log"></div>
+
+        <div style="margin-top: 10px; font-size: 0.8rem; color: #9ca3af;">
+          <strong>Policy server log (local):</strong>
+        </div>
+        <pre id="policy-log" class="log"></pre>
+      </section>
+
+      <section class="card">
+        <h2>xArm Client</h2>
+        <div class="xarm-controls">
+          <label for="xarm-prompt">Prompt</label>
+          <textarea id="xarm-prompt">Pick a ripe, red tomato and drop it in the blue bucket. [crop=tomato]</textarea>
+        </div>
+
+        <div class="xarm-buttons">
+          <button id="xarm-run-btn" class="primary">▶ Run xArm Client</button>
+          <button id="xarm-stop-btn" class="secondary" disabled>⏹ Stop</button>
+          <span id="xarm-status-label" class="xarm-status-pill xarm-status-idle">IDLE</span>
+        </div>
+
+        <div class="xarm-log-header">Client log</div>
+        <pre id="xarm-log" class="log"></pre>
+      </section>
     </div>
+  </main>
 
-    <div class="grid2" style="margin-top:10px;">
-      <div class="imgWrap">
-        <header>
-          <div class="t">Base</div>
-          <div class="badge" id="baseStat">—</div>
-        </header>
-        <img id="imgBase" src="/video/base" alt="Base camera" />
-      </div>
-      <div class="imgWrap">
-        <header>
-          <div class="t">Wrist</div>
-          <div class="badge" id="wristStat">—</div>
-        </header>
-        <img id="imgWrist" src="/video/wrist" alt="Wrist camera" />
-      </div>
-    </div>
-  </section>
+  <footer>
+    XArm6 demo • Orchestrator-backed • MJPEG cameras • xArm client
+  </footer>
 
-  <section class="card">
-    <h2>Server Control</h2>
-    <div class="sub">Start/stop policy server (HPC or Local). Shutdown cancels early even before job_id exists.</div>
+  <script>
+    const statusDot = document.getElementById("status-dot");
+    const statusText = document.getElementById("status-text");
+    const metaJob = document.getElementById("meta-job");
+    const metaRemote = document.getElementById("meta-remote");
+    const metaServer = document.getElementById("meta-server");
+    const lastMessage = document.getElementById("last-message");
+    const runBtn = document.getElementById("run-btn");
+    const healthBtn = document.getElementById("health-btn");
+    const camBtn = document.getElementById("cam-btn");
 
-    <div class="radioRow">
-      <label><input type="radio" name="mode" value="local" id="modeLocal"> Local</label>
-      <label><input type="radio" name="mode" value="hpc" id="modeHpc"> HPC</label>
-      <span class="badge" id="cancelBadge" style="display:none;">cancel requested</span>
-    </div>
+    const baseStatus = document.getElementById("base-status");
+    const wristStatus = document.getElementById("wrist-status");
 
-    <div class="row" style="margin-top:10px;">
-      <button class="btnOk" id="btnRunServer">Run Server</button>
-      <button class="btnDanger" id="btnStopServer">Shutdown Server</button>
-      <button id="btnCopyDetails">Copy Details</button>
-    </div>
+    const xarmRunBtn = document.getElementById("xarm-run-btn");
+    const xarmStopBtn = document.getElementById("xarm-stop-btn");
+    const xarmPromptInput = document.getElementById("xarm-prompt");
+    const xarmStatusLabel = document.getElementById("xarm-status-label");
+    const xarmLogElem = document.getElementById("xarm-log");
 
-    <div class="kv" style="margin-top:10px;">
-      <div>preferred_mode</div><div><b id="kvPreferred">—</b></div>
-      <div>active_mode</div><div><b id="kvActive">—</b></div>
-      <div>job_id</div><div><b id="kvJob">—</b></div>
-      <div>remote</div><div><b id="kvRemote">—</b></div>
-    </div>
+    const policyLogElem = document.getElementById("policy-log");
 
-    <div style="margin-top:10px;">
-      <div class="badge">Orchestrator / Status Detail</div>
-      <div class="statusLine" id="statusDetail">—</div>
-    </div>
-  </section>
+    const modeLocal = document.getElementById("mode-local");
+    const modeHpc = document.getElementById("mode-hpc");
 
-  <section class="card">
-    <h2>xArm Client</h2>
-    <div class="sub">Runs your local client against ws://localhost:8000</div>
-
-    <label class="badge">Prompt</label>
-    <textarea id="promptBox" placeholder="Enter a prompt..."></textarea>
-
-    <div class="row" style="margin-top:10px;">
-      <button class="btnOk" id="btnRunXarm">Run xArm Client</button>
-      <button class="btnDanger" id="btnStopXarm">Stop xArm Client</button>
-      <span class="badge" id="xarmBadge">xarm: —</span>
-    </div>
-
-    <div class="logBox" id="xarmLog">—</div>
-  </section>
-
-  <section class="card">
-    <h2>Local Policy Server Log</h2>
-    <div class="sub">This shows local policy stdout/stderr (checkpoint errors show here).</div>
-    <div class="row" style="justify-content:space-between;">
-      <span class="badge" id="localLogBadge">local: —</span>
-      <button id="btnClearLocalLog">Clear View</button>
-    </div>
-    <div class="logBox" id="localLog">—</div>
-  </section>
-</main>
-
-<div class="toast" id="toast"></div>
-
-<script>
-  const els = {
-    pillMode: document.getElementById('pillMode'),
-    pillState: document.getElementById('pillState'),
-    pillRunning: document.getElementById('pillRunning'),
-    statusDetail: document.getElementById('statusDetail'),
-    kvPreferred: document.getElementById('kvPreferred'),
-    kvActive: document.getElementById('kvActive'),
-    kvJob: document.getElementById('kvJob'),
-    kvRemote: document.getElementById('kvRemote'),
-    cancelBadge: document.getElementById('cancelBadge'),
-
-    modeLocal: document.getElementById('modeLocal'),
-    modeHpc: document.getElementById('modeHpc'),
-
-    btnRunServer: document.getElementById('btnRunServer'),
-    btnStopServer: document.getElementById('btnStopServer'),
-    btnCopyDetails: document.getElementById('btnCopyDetails'),
-
-    btnStartCameras: document.getElementById('btnStartCameras'),
-    camBadge: document.getElementById('camBadge'),
-    baseStat: document.getElementById('baseStat'),
-    wristStat: document.getElementById('wristStat'),
-
-    promptBox: document.getElementById('promptBox'),
-    btnRunXarm: document.getElementById('btnRunXarm'),
-    btnStopXarm: document.getElementById('btnStopXarm'),
-    xarmBadge: document.getElementById('xarmBadge'),
-    xarmLog: document.getElementById('xarmLog'),
-
-    localLogBadge: document.getElementById('localLogBadge'),
-    localLog: document.getElementById('localLog'),
-    btnClearLocalLog: document.getElementById('btnClearLocalLog'),
-
-    toast: document.getElementById('toast'),
-  };
-
-  function toast(msg){
-    els.toast.textContent = msg;
-    els.toast.style.display = 'block';
-    setTimeout(()=>{ els.toast.style.display='none'; }, 4200);
-  }
-
-  async function fetchJSON(url, opts){
-    const res = await fetch(url, opts);
-    let data = null;
-    try { data = await res.json(); } catch(e) {}
-    if(!res.ok){
-      const detail = data && (data.detail || data.message) ? (data.detail || data.message) : (res.status + " " + res.statusText);
-      throw new Error(detail);
-    }
-    return data;
-  }
-
-  function selectedMode(){
-    return els.modeHpc.checked ? "hpc" : "local";
-  }
-
-  function setModeRadio(value){
-    els.modeLocal.checked = (value === "local");
-    els.modeHpc.checked = (value === "hpc");
-  }
-
-  async function pollStatus(){
-    const s = await fetchJSON("/api/status");
-
-    els.pillMode.textContent = s.server_mode ?? "—";
-    els.pillState.textContent = s.state ?? "—";
-    els.pillRunning.textContent = s.server_running ? "yes" : "no";
-
-    els.kvPreferred.textContent = s.preferred_mode ?? "—";
-    els.kvActive.textContent = s.active_mode ?? "—";
-    els.kvJob.textContent = s.job_id ?? "—";
-    els.kvRemote.textContent = (s.remote_ip && s.remote_port) ? (s.remote_ip + ":" + s.remote_port) : "—";
-
-    els.statusDetail.textContent = (s.message && s.message.trim()) ? s.message : "—";
-
-    if(s.hpc_cancel_requested){
-      els.cancelBadge.style.display = "inline-block";
-    } else {
-      els.cancelBadge.style.display = "none";
+    function setRadiosEnabled(enabled) {
+      modeLocal.disabled = !enabled;
+      modeHpc.disabled = !enabled;
     }
 
-    // Radio sync:
-    // - While busy/running => lock radios to server_mode (active)
-    // - While idle => reflect preferred_mode and allow user changes
-    const lockRadios = (s.server_running || s.busy);
-    if(lockRadios){
-      setModeRadio(s.server_mode);
-    } else {
-      setModeRadio(s.preferred_mode);
+    function updateStatusView(data) {
+      const state = (data.state || "IDLE").toUpperCase();
+      const msg = data.message || "";
+      const jobId = data.job_id || "—";
+      const remote = (data.remote_ip && data.remote_port)
+        ? `${data.remote_ip}:${data.remote_port}`
+        : "—";
+      const serverRunning = !!data.server_running;
+      const busy = !!data.busy;
+      const mode = (data.server_mode || "local").toLowerCase();
+
+      // Keep radios in sync with backend mode
+      if (mode === "local") {
+        modeLocal.checked = true;
+      } else {
+        modeHpc.checked = true;
+      }
+
+      // Disable mode changes while running/busy (prevents confusion)
+      setRadiosEnabled(!(serverRunning || busy));
+
+      statusText.textContent = serverRunning
+        ? `${state} (${mode.toUpperCase()})`
+        : `${state} (${mode.toUpperCase()})`;
+
+      lastMessage.textContent = msg;
+      metaJob.textContent = `Job: ${jobId}`;
+      metaRemote.textContent = `Remote: ${remote}`;
+      metaServer.textContent = serverRunning
+        ? `Server: RUNNING (${mode.toUpperCase()})`
+        : "Server: NOT RUNNING";
+
+      statusDot.className = "status-dot";
+      if (state === "READY") statusDot.classList.add("status-ready");
+      else if (state.startsWith("ERROR")) statusDot.classList.add("status-error");
+      else if (state === "IDLE") statusDot.classList.add("status-idle");
+      else statusDot.classList.add("status-busy");
+
+      // Button state
+      if (serverRunning) {
+        runBtn.disabled = true;
+        runBtn.textContent = mode === "local" ? "Local server running" : "Server running";
+      } else if (busy) {
+        runBtn.disabled = true;
+        runBtn.textContent = "Running...";
+      } else {
+        runBtn.disabled = false;
+        runBtn.textContent = "▶ Run Policy Server";
+      }
     }
-    els.modeLocal.disabled = lockRadios;
-    els.modeHpc.disabled = lockRadios;
 
-    // Buttons
-    els.btnRunServer.disabled = (s.server_running || s.busy);
-    els.btnStopServer.disabled = !(s.server_running || s.busy);
+    function updateCameraStatusView(data) {
+      function apply(elem, s) {
+        if (!elem || !s) return;
+        const online = !!s.online;
+        elem.className = "cam-status " + (online ? "cam-online" : "cam-offline");
+        elem.textContent = online ? "ONLINE" : "DISCONNECTED";
+      }
 
-    els.btnRunXarm.disabled = (s.state !== "READY");
-    els.btnStopXarm.disabled = false;
+      apply(baseStatus, data.base);
+      apply(wristStatus, data.wrist);
 
-    // State color hint (only the text)
-    els.pillState.style.color =
-      (s.state && s.state.startsWith("ERROR")) ? "var(--err)" :
-      (s.state === "READY") ? "var(--ok)" : "var(--text)";
-  }
-
-  function camOkFlag(obj){
-    if(!obj) return { ok: false, err: false };
-    if(typeof obj.online === "boolean") return { ok: obj.online, err: !obj.online };
-    if(typeof obj.ok === "boolean") return { ok: obj.ok, err: !obj.ok };
-    if(obj.error) return { ok: false, err: true };
-    return { ok: false, err: false };
-  }
-
-  async function pollCameras(){
-    const c = await fetchJSON("/api/camera-status");
-    els.camBadge.textContent = c.server_running ? "camera: running" : "camera: stopped";
-    els.camBadge.className = "badge " + (c.server_running ? "ok" : "warn");
-
-    const b = camOkFlag(c.base);
-    const w = camOkFlag(c.wrist);
-
-    els.baseStat.textContent = b.ok ? "ok" : (b.err ? "err" : "—");
-    els.baseStat.className = "badge " + (b.ok ? "ok" : (b.err ? "err" : ""));
-
-    els.wristStat.textContent = w.ok ? "ok" : (w.err ? "err" : "—");
-    els.wristStat.className = "badge " + (w.ok ? "ok" : (w.err ? "err" : ""));
-  }
-
-  async function pollLogs(){
-    const p = await fetchJSON("/api/policy-server-log");
-    const localRunning = !!p.local_running;
-    const rc = (p.local_returncode === null || typeof p.local_returncode === "undefined") ? null : p.local_returncode;
-
-    els.localLogBadge.textContent = localRunning
-      ? "local: running"
-      : ("local: stopped" + (rc !== null ? (" (rc=" + rc + ")") : ""));
-
-    els.localLog.textContent = (p.log && p.log.length) ? p.log : "—";
-  }
-
-  async function pollXarm(){
-    const x = await fetchJSON("/api/xarm-status");
-    els.xarmBadge.textContent = x.running
-      ? "xarm: running"
-      : ("xarm: stopped" + (x.returncode !== null && x.returncode !== undefined ? (" (rc=" + x.returncode + ")") : ""));
-    els.xarmLog.textContent = (x.log && x.log.length) ? x.log : "—";
-  }
-
-  // Actions
-  els.btnRunServer.addEventListener("click", async ()=>{
-    try{
-      const mode = selectedMode();
-      await fetchJSON("/api/run-server", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({mode})
-      });
-      toast("Server start requested (" + mode + ").");
-    }catch(e){
-      toast("Run server failed: " + e.message);
+      const serverRunning = !!data.server_running;
+      if (serverRunning) {
+        camBtn.disabled = true;
+        camBtn.textContent = "📷 Camera Server Running";
+      } else {
+        camBtn.disabled = false;
+        camBtn.textContent = "📷 Start Camera Server";
+      }
     }
-  });
 
-  els.btnStopServer.addEventListener("click", async ()=>{
-    try{
-      const r = await fetchJSON("/api/stop-server", { method:"POST" });
-      toast("Stop requested: " + (r.detail || "ok"));
-    }catch(e){
-      toast("Stop failed: " + e.message);
+    function updateXarmView(data) {
+      const running = !!data.running;
+      const rc = data.returncode;
+      const log = data.log || "";
+
+      xarmLogElem.textContent = log;
+
+      if (running) {
+        xarmStatusLabel.textContent = "RUNNING";
+        xarmStatusLabel.className = "xarm-status-pill xarm-status-running";
+        xarmRunBtn.disabled = true;
+        xarmStopBtn.disabled = false;
+      } else {
+        let label = "IDLE";
+        let cls = "xarm-status-pill ";
+        if (rc === null || typeof rc === "undefined") {
+          cls += "xarm-status-idle";
+        } else if (rc === 0) {
+          label = "FINISHED";
+          cls += "xarm-status-ok";
+        } else {
+          label = "ERROR (" + rc + ")";
+          cls += "xarm-status-error";
+        }
+        xarmStatusLabel.textContent = label;
+        xarmStatusLabel.className = cls;
+        xarmRunBtn.disabled = false;
+        xarmStopBtn.disabled = true;
+      }
     }
-  });
 
-  els.btnCopyDetails.addEventListener("click", async ()=>{
-    try{
-      await navigator.clipboard.writeText(els.statusDetail.textContent || "");
-      toast("Copied status detail to clipboard.");
-    }catch(e){
-      toast("Copy failed: " + e.message);
+    function updatePolicyLogView(data) {
+      policyLogElem.textContent = data.log || "";
     }
-  });
 
-  els.btnStartCameras.addEventListener("click", async ()=>{
-    try{
-      await fetchJSON("/api/start-cameras", { method:"POST" });
-      toast("Camera server start requested.");
-    }catch(e){
-      toast("Start cameras failed: " + e.message);
+    async function fetchStatus() {
+      try {
+        const resp = await fetch("/api/status");
+        if (!resp.ok) return;
+        const data = await resp.json();
+        updateStatusView(data);
+      } catch (e) {
+        console.error("Status poll failed:", e);
+      }
     }
-  });
 
-  els.modeLocal.addEventListener("change", async ()=>{
-    if(!els.modeLocal.checked) return;
-    try{
-      await fetchJSON("/api/set-mode", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({mode:"local"})
-      });
-      toast("Preferred mode set to LOCAL.");
-    }catch(e){
-      toast("Set mode failed: " + e.message);
+    async function fetchCameraStatus() {
+      try {
+        const resp = await fetch("/api/camera-status");
+        if (!resp.ok) return;
+        const data = await resp.json();
+        updateCameraStatusView(data);
+      } catch (e) {
+        console.error("Camera status poll failed:", e);
+      }
     }
-  });
 
-  els.modeHpc.addEventListener("change", async ()=>{
-    if(!els.modeHpc.checked) return;
-    try{
-      await fetchJSON("/api/set-mode", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({mode:"hpc"})
-      });
-      toast("Preferred mode set to HPC.");
-    }catch(e){
-      toast("Set mode failed: " + e.message);
+    async function fetchXarmStatus() {
+      try {
+        const resp = await fetch("/api/xarm-status");
+        if (!resp.ok) return;
+        const data = await resp.json();
+        updateXarmView(data);
+      } catch (e) {
+        console.error("xArm status poll failed:", e);
+      }
     }
-  });
 
-  els.btnRunXarm.addEventListener("click", async ()=>{
-    try{
-      const prompt = (els.promptBox.value || "").trim();
-      await fetchJSON("/api/run-xarm", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({prompt})
-      });
-      toast("xArm client started.");
-    }catch(e){
-      toast("Run xArm failed: " + e.message);
+    async function fetchPolicyLog() {
+      try {
+        const resp = await fetch("/api/policy-server-log");
+        if (!resp.ok) return;
+        const data = await resp.json();
+        updatePolicyLogView(data);
+      } catch (e) {
+        console.error("Policy log poll failed:", e);
+      }
     }
-  });
 
-  els.btnStopXarm.addEventListener("click", async ()=>{
-    try{
-      await fetchJSON("/api/stop-xarm", { method:"POST" });
-      toast("Stop xArm requested.");
-    }catch(e){
-      toast("Stop xArm failed: " + e.message);
+    async function setMode(mode) {
+      try {
+        const resp = await fetch("/api/set-mode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode }),
+        });
+        if (!resp.ok) {
+          const text = await resp.text();
+          alert("Failed to set mode: " + text);
+        }
+      } catch (e) {
+        alert("Error setting mode: " + e);
+      }
     }
-  });
 
-  els.btnClearLocalLog.addEventListener("click", ()=>{
-    els.localLog.textContent = "—";
-    toast("Cleared local log view (server still retains recent lines).");
-  });
+    async function runServer() {
+      const selected = document.querySelector('input[name="server-mode"]:checked');
+      const mode = selected ? selected.value : "local";
 
-  // default prompt
-  els.promptBox.value = "Pick a ripe, red tomato and drop it in the blue bucket. [crop=tomato]";
+      try {
+        const resp = await fetch("/api/run-server", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode }),
+        });
 
-  async function loop(){
-    try { await pollStatus(); } catch(e){ /* ignore */ }
-    try { await pollCameras(); } catch(e){ /* ignore */ }
-    try { await pollLogs(); } catch(e){ /* ignore */ }
-    try { await pollXarm(); } catch(e){ /* ignore */ }
-  }
+        if (!resp.ok) {
+          const text = await resp.text();
+          let msg = text;
+          try {
+            const parsed = JSON.parse(text);
+            if (parsed.detail) msg = parsed.detail;
+          } catch (_) {}
+          alert("Failed to start server:\n\n" + msg);
+        }
+      } catch (e) {
+        alert("Error starting server: " + e);
+      }
+    }
 
-  loop();
-  setInterval(loop, 1200);
-</script>
+    async function runHealthCheck() {
+      try {
+        const resp = await fetch("/api/health");
+        const data = await resp.json();
+        alert("Health check: " + data.status + (data.detail ? ("\n" + data.detail) : ""));
+      } catch (e) {
+        alert("Health check failed: " + e);
+      }
+    }
+
+    async function startCameraServer() {
+      camBtn.disabled = true;
+      camBtn.textContent = "Starting cameras...";
+
+      try {
+        const resp = await fetch("/api/start-cameras", { method: "POST" });
+        if (!resp.ok) {
+          const text = await resp.text();
+          let msg = text;
+          try {
+            const parsed = JSON.parse(text);
+            if (parsed.detail) msg = parsed.detail;
+          } catch (_) {}
+          alert("Failed to start camera server:\n\n" + msg);
+        } else {
+          const data = await resp.json();
+          alert("Camera server: " + (data.status || "started"));
+        }
+      } catch (e) {
+        alert("Error starting camera server: " + e);
+      } finally {
+        camBtn.textContent = "📷 Start Camera Server";
+      }
+    }
+
+    async function runXarm() {
+      xarmRunBtn.disabled = true;
+      const prompt = xarmPromptInput ? xarmPromptInput.value : "";
+
+      try {
+        const resp = await fetch("/api/run-xarm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        });
+        if (!resp.ok) {
+          const text = await resp.text();
+          let msg = text;
+          try {
+            const parsed = JSON.parse(text);
+            if (parsed.detail) msg = parsed.detail;
+          } catch (_) {}
+          alert("Failed to start xArm client:\n\n" + msg);
+        }
+      } catch (e) {
+        alert("Error starting xArm client: " + e);
+      }
+    }
+
+    async function stopXarm() {
+      xarmStopBtn.disabled = true;
+      try {
+        const resp = await fetch("/api/stop-xarm", { method: "POST" });
+        if (!resp.ok) {
+          const text = await resp.text();
+          let msg = text;
+          try {
+            const parsed = JSON.parse(text);
+            if (parsed.detail) msg = parsed.detail;
+          } catch (_) {}
+          alert("Failed to stop xArm client:\n\n" + msg);
+        }
+      } catch (e) {
+        alert("Error stopping xArm client: " + e);
+      }
+    }
+
+    // mode change -> backend immediately
+    modeLocal.addEventListener("change", () => { if (modeLocal.checked) setMode("local"); });
+    modeHpc.addEventListener("change", () => { if (modeHpc.checked) setMode("hpc"); });
+
+    runBtn.addEventListener("click", runServer);
+    healthBtn.addEventListener("click", runHealthCheck);
+    camBtn.addEventListener("click", startCameraServer);
+    xarmRunBtn.addEventListener("click", runXarm);
+    xarmStopBtn.addEventListener("click", stopXarm);
+
+    // Poll
+    fetchStatus();
+    fetchCameraStatus();
+    fetchXarmStatus();
+    fetchPolicyLog();
+    setInterval(fetchStatus, 2000);
+    setInterval(fetchCameraStatus, 2000);
+    setInterval(fetchXarmStatus, 2000);
+    setInterval(fetchPolicyLog, 2000);
+  </script>
 </body>
 </html>
