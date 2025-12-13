@@ -85,7 +85,7 @@ _last_status: Dict[str, Any] = {
 }
 
 # Track which mode we're in for the policy server
-_server_mode: ServerMode = ServerMode.HPC
+_server_mode: ServerMode = ServerMode.LOCAL
 
 # Global camera server process (if any)
 _camera_server_lock = threading.Lock()
@@ -149,11 +149,12 @@ class RunServerRequest(BaseModel):
 
 def _on_state_change(state: OrchestratorState, message: str) -> None:
     """Callback from Orchestrator to update status for UI."""
+    global _server_mode
     with _status_lock:
         _last_status["state"] = state.value
         _last_status["message"] = message
-        _last_status["server_mode"] = ServerMode.HPC.value
-    print(f"[DASHBOARD][HPC] {state.value}: {message}")
+        _last_status["server_mode"] = _server_mode.value  # <-- don't hardcode HPC
+    print(f"[DASHBOARD][{_server_mode.value.upper()}] {state.value}: {message}")
 
 
 def _start_orchestrator_thread() -> bool:
@@ -343,15 +344,8 @@ def api_status() -> Dict[str, Any]:
 
 @app.post("/api/run-server", response_class=JSONResponse)
 def api_run_server(req: RunServerRequest) -> Dict[str, Any]:
-    """
-    Start the policy server either via HPC orchestrator or locally,
-    depending on the requested mode.
-
-    Prevents starting a second sequence if a server/job is already running/busy.
-    """
     global _server_mode
 
-    # Don't start if anything is already active
     if _any_server_running():
         raise HTTPException(
             status_code=409,
@@ -359,8 +353,13 @@ def api_run_server(req: RunServerRequest) -> Dict[str, Any]:
         )
 
     if req.mode == ServerMode.HPC:
+        # Set before thread start so _on_state_change uses correct mode
+        _server_mode = ServerMode.HPC
+
         started = _start_orchestrator_thread()
         if not started:
+            # Optional: reset to default if you care
+            # _server_mode = ServerMode.LOCAL
             raise HTTPException(
                 status_code=409,
                 detail="Server orchestration already running or server already READY.",
@@ -370,19 +369,19 @@ def api_run_server(req: RunServerRequest) -> Dict[str, Any]:
             _last_status["state"] = OrchestratorState.SUBMITTING_JOB.value
             _last_status["message"] = "Submitting policy server job..."
             _last_status["server_mode"] = ServerMode.HPC.value
-        _server_mode = ServerMode.HPC
-    else:
-        try:
-            _start_local_policy_server()
-        except RuntimeError as e:
-            raise HTTPException(
-                status_code=500,
-                detail=str(e),
-            )
-        _server_mode = ServerMode.LOCAL
 
-    return {"status": "started", "mode": req.mode.value}
+        return {"status": "started", "mode": "hpc"}
 
+    # LOCAL
+    _server_mode = ServerMode.LOCAL
+    try:
+        _start_local_policy_server()  # should set _last_status incl server_mode=local
+    except RuntimeError as e:
+        # Optional: reset on failure
+        # _server_mode = ServerMode.LOCAL
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"status": "started", "mode": "local"}
 
 @app.get("/api/health", response_class=JSONResponse)
 def api_health() -> Dict[str, Any]:
