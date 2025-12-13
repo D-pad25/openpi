@@ -8,6 +8,9 @@ Web dashboard for:
 - Displaying two camera feeds (base + wrist) via MJPEG
 - Running the local xArm client with a chosen prompt
 - Capturing and exposing local policy server stdout/stderr to the UI
+- Stopping policy server:
+    * LOCAL: terminate local process group/session safely
+    * HPC: request cancel; qdel once job_id is known; stop tunnel too
 
 Run with:
     uv run src/xarm6_control/dashboard/dashboard_app.py
@@ -18,9 +21,12 @@ Then open:
 
 from __future__ import annotations
 
+import os
+import signal
+import sys
 import threading
 import time
-from typing import Optional, Dict, Any, Generator, List
+from typing import Optional, Dict, Any, List
 from enum import Enum
 import subprocess
 from pathlib import Path
@@ -31,32 +37,44 @@ from pydantic import BaseModel
 
 import websockets.sync.client
 
-# Import orchestrator (with CLEARING_OLD_ENDPOINT, health polling, etc.)
 from xarm6_control.dashboard.xarm_server_orchestrator import (
     Orchestrator,
     OrchestratorConfig,
     OrchestratorState,
 )
 
-# Import ZMQ camera backend (separate file)
 from xarm6_control.dashboard.zmq_camera_backend import (
     ZmqCameraBackend,
     mjpeg_stream_generator,
 )
 
 # ============================================================
-# DEFINES
+# Paths / defaults
 # ============================================================
 
-REPO_ROOT = Path(__file__).resolve().parent
-PIPELINE_SCRIPT = REPO_ROOT / "xarm_pipeline.sh"
+HERE = Path(__file__).resolve().parent
+PIPELINE_SCRIPT = HERE / "xarm_pipeline.sh"
 
-# Top-level openpi repo root (where src/ lives)
-OPENPI_ROOT = Path(__file__).resolve().parents[3]
+# Try to find OPENPI_ROOT robustly (where scripts/serve_policy.py exists)
+def _find_openpi_root() -> Path:
+    start = Path(__file__).resolve()
+    for p in [start] + list(start.parents):
+        if (p / "scripts" / "serve_policy.py").exists() and (p / "src").exists():
+            return p
+    # Fallback (your previous assumption)
+    return Path(__file__).resolve().parents[3]
+
+OPENPI_ROOT = _find_openpi_root()
 
 DEFAULT_XARM_PROMPT = "Pick a ripe, red tomato and drop it in the blue bucket. [crop=tomato]"
-XARM_PORT = "8000"
+XARM_PORT = 8000
 
+SERVE_POLICY_SCRIPT = OPENPI_ROOT / "scripts" / "serve_policy.py"
+XARM_CLIENT_SCRIPT = OPENPI_ROOT / "src" / "xarm6_control" / "main2.py"
+
+# ============================================================
+# Mode enum
+# ============================================================
 
 class ServerMode(str, Enum):
     HPC = "hpc"
@@ -64,7 +82,7 @@ class ServerMode(str, Enum):
 
 
 # ============================================================
-# Global orchestrator + state
+# FastAPI + global state
 # ============================================================
 
 app = FastAPI(title="XArm6 Demo Dashboard")
@@ -73,17 +91,20 @@ _status_lock = threading.Lock()
 _last_status: Dict[str, Any] = {
     "state": OrchestratorState.IDLE.value,
     "message": "Idle",
-    # This will represent the mode to DISPLAY in the UI (active if running, otherwise preferred)
-    "server_mode": ServerMode.LOCAL.value,
+    "server_mode": ServerMode.LOCAL.value,  # display mode (active if running, else preferred)
 }
 
-# Preferred mode = what user selected in UI (while idle)
+# Preferred mode = what user selected while idle
 _preferred_mode_lock = threading.Lock()
 _preferred_mode: ServerMode = ServerMode.LOCAL
 
-# Active mode = what is actually running (or orchestrating). None means idle.
+# Active mode = what is actually running/orchestrating
 _active_mode_lock = threading.Lock()
 _active_mode: Optional[ServerMode] = None
+
+# Cancel coordination for HPC (if job_id not known yet)
+_hpc_cancel_lock = threading.Lock()
+_hpc_cancel_requested: bool = False
 
 # Camera server process
 _camera_server_lock = threading.Lock()
@@ -100,13 +121,17 @@ _local_server_process: Optional[subprocess.Popen] = None
 _local_server_log_lock = threading.Lock()
 _local_server_log_lines: List[str] = []
 _local_server_returncode: Optional[int] = None
-_MAX_LOCAL_SERVER_LOG_LINES = 400
+_MAX_LOCAL_SERVER_LOG_LINES = 600
+
+_local_start_thread: Optional[threading.Thread] = None
+_local_start_thread_lock = threading.Lock()
 
 # xArm client process + logs
 _xarm_lock = threading.Lock()
 _xarm_process: Optional[subprocess.Popen] = None
 _xarm_log_lines: List[str] = []
-_MAX_XARM_LOG_LINES = 200
+_xarm_returncode: Optional[int] = None
+_MAX_XARM_LOG_LINES = 400
 
 
 # ============================================================
@@ -118,70 +143,29 @@ def _set_active_mode(mode: Optional[ServerMode]) -> None:
     with _active_mode_lock:
         _active_mode = mode
 
-
 def _get_active_mode() -> Optional[ServerMode]:
     with _active_mode_lock:
         return _active_mode
-
 
 def _set_preferred_mode(mode: ServerMode) -> None:
     global _preferred_mode
     with _preferred_mode_lock:
         _preferred_mode = mode
 
-
 def _get_preferred_mode() -> ServerMode:
     with _preferred_mode_lock:
         return _preferred_mode
 
-
 def _get_display_mode() -> ServerMode:
-    """
-    Display mode: if something is running/orchestrating -> active mode
-    else -> preferred mode.
-    """
     am = _get_active_mode()
     return am if am is not None else _get_preferred_mode()
-
 
 def _set_status(state: str, message: str, server_mode: Optional[ServerMode] = None) -> None:
     with _status_lock:
         _last_status["state"] = state
         _last_status["message"] = message
-        if server_mode is not None:
-            _last_status["server_mode"] = server_mode.value
-        else:
-            _last_status["server_mode"] = _get_display_mode().value
+        _last_status["server_mode"] = (server_mode.value if server_mode is not None else _get_display_mode().value)
 
-
-# ============================================================
-# xArm client logging
-# ============================================================
-
-def _append_xarm_log(line: str) -> None:
-    line = line.rstrip("\n")
-    with _xarm_lock:
-        _xarm_log_lines.append(line)
-        if len(_xarm_log_lines) > _MAX_XARM_LOG_LINES:
-            del _xarm_log_lines[:-_MAX_XARM_LOG_LINES]
-    print(f"[xarm-client-log] {line}")
-
-
-def _xarm_log_reader(proc: subprocess.Popen) -> None:
-    try:
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            _append_xarm_log(line)
-    except Exception as e:
-        _append_xarm_log(f"[dashboard] Error reading xArm client output: {e}")
-    finally:
-        rc = proc.wait()
-        _append_xarm_log(f"[dashboard] xArm client exited with return code {rc}")
-
-
-# ============================================================
-# Local policy server logging
-# ============================================================
 
 def _append_local_server_log(line: str) -> None:
     line = line.rstrip("\n")
@@ -191,43 +175,36 @@ def _append_local_server_log(line: str) -> None:
             del _local_server_log_lines[:-_MAX_LOCAL_SERVER_LOG_LINES]
     print(f"[local-policy-log] {line}")
 
-
 def _set_local_server_returncode(rc: Optional[int]) -> None:
     global _local_server_returncode
     with _local_server_log_lock:
         _local_server_returncode = rc
 
+def _append_xarm_log(line: str) -> None:
+    line = line.rstrip("\n")
+    with _xarm_lock:
+        _xarm_log_lines.append(line)
+        if len(_xarm_log_lines) > _MAX_XARM_LOG_LINES:
+            del _xarm_log_lines[:-_MAX_XARM_LOG_LINES]
+    print(f"[xarm-client-log] {line}")
 
-def _local_server_log_reader(proc: subprocess.Popen) -> None:
-    global _local_server_process
-    try:
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            _append_local_server_log(line)
-    except Exception as e:
-        _append_local_server_log(f"[dashboard] Error reading local policy output: {e}")
-    finally:
-        rc = proc.wait()
-        _set_local_server_returncode(rc)
-        _append_local_server_log(f"[dashboard] Local policy server exited with return code {rc}")
+def _set_xarm_returncode(rc: Optional[int]) -> None:
+    global _xarm_returncode
+    with _xarm_lock:
+        _xarm_returncode = rc
 
-        # If local was active, clear active mode so UI returns to preferred mode
-        if _get_active_mode() == ServerMode.LOCAL:
-            _set_active_mode(None)
 
-        # Update status with a visible error
-        if rc != 0:
-            _set_status(
-                "ERROR_LOCAL_EXIT",
-                f"Local policy server exited (rc={rc}). See Policy Server Log.",
-                server_mode=ServerMode.LOCAL,
-            )
-
+# ============================================================
+# Process state helpers
+# ============================================================
 
 def _local_server_running() -> bool:
     with _local_server_lock:
         return _local_server_process is not None and _local_server_process.poll() is None
 
+def _local_starting() -> bool:
+    with _local_start_thread_lock:
+        return _local_start_thread is not None and _local_start_thread.is_alive()
 
 def _any_server_running_or_busy() -> bool:
     with _orch_thread_lock:
@@ -237,15 +214,15 @@ def _any_server_running_or_busy() -> bool:
     hpc_ready = orch is not None and orch.state == OrchestratorState.READY
     local_ready = _local_server_running()
 
-    return hpc_thread_alive or hpc_ready or local_ready
+    return hpc_thread_alive or _local_starting() or hpc_ready or local_ready
 
 
 # ============================================================
 # Health checking
 # ============================================================
 
-def _ws_health_once(port: int, timeout_s: float = 3.0) -> tuple[bool, str]:
-    uri = f"ws://localhost:{port}"
+def _ws_health_once(host: str, port: int, timeout_s: float = 3.0) -> tuple[bool, str]:
+    uri = f"ws://{host}:{port}"
     try:
         ws = websockets.sync.client.connect(
             uri,
@@ -253,54 +230,110 @@ def _ws_health_once(port: int, timeout_s: float = 3.0) -> tuple[bool, str]:
             close_timeout=timeout_s,
         )
         ws.close()
-        return True, "WebSocket handshake succeeded."
+        return True, f"WebSocket handshake succeeded at {uri}."
     except Exception as e:
-        return False, str(e)
+        return False, f"{uri} -> {type(e).__name__}: {e}"
 
-
-def _wait_for_local_server_healthy(proc: subprocess.Popen, timeout_s: float = 180.0, poll_s: float = 2.0) -> None:
+def _wait_for_local_server_healthy(proc: subprocess.Popen, timeout_s: float = 900.0, poll_s: float = 2.0) -> None:
     """
-    Wait until ws://localhost:XARM_PORT accepts a websocket handshake.
-    If the process dies during startup, capture output and raise RuntimeError.
+    Wait until ws://127.0.0.1:XARM_PORT accepts a websocket handshake.
+    If the process dies during startup, raise with a clear message (log already captured).
     """
     deadline = time.time() + timeout_s
-    port = int(XARM_PORT)
+    last_log_t = 0.0
+    last_msg = ""
 
     while time.time() < deadline:
-        # If process died, capture whatever output remains
         ret = proc.poll()
         if ret is not None:
-            try:
-                out, _ = proc.communicate(timeout=1.0)
-            except Exception:
-                out = ""
-            if out:
-                for line in out.splitlines():
-                    _append_local_server_log(line)
             _set_local_server_returncode(ret)
-            raise RuntimeError(
-                f"Local policy server exited during startup (rc={ret}).\n\n{out or '<no output>'}"
-            )
+            raise RuntimeError(f"Local policy server exited during startup (rc={ret}). See Policy Server Log.")
 
-        ok, msg = _ws_health_once(port, timeout_s=2.0)
+        ok, msg = _ws_health_once("127.0.0.1", XARM_PORT, timeout_s=2.0)
         if ok:
             return
 
-        _append_local_server_log(f"[dashboard] Waiting for local server health... ({msg})")
+        now = time.time()
+        if msg != last_msg or (now - last_log_t) > 10.0:
+            _append_local_server_log(f"[dashboard] Waiting for local server health... ({msg})")
+            last_msg = msg
+            last_log_t = now
+
         time.sleep(poll_s)
 
     raise RuntimeError(f"Timed out waiting for local server to become healthy (>{timeout_s}s).")
 
 
 # ============================================================
-# Orchestrator callback
+# HPC cancel coordination
+# ============================================================
+
+def _set_hpc_cancel_requested(v: bool) -> None:
+    global _hpc_cancel_requested
+    with _hpc_cancel_lock:
+        _hpc_cancel_requested = v
+
+def _get_hpc_cancel_requested() -> bool:
+    with _hpc_cancel_lock:
+        return _hpc_cancel_requested
+
+def _attempt_cancel_hpc_if_requested() -> None:
+    """
+    If cancel was requested and we now have a job_id, delete it (via orchestrator SSH)
+    and stop the tunnel too. Safe to call from orchestrator callback.
+    """
+    if not _get_hpc_cancel_requested():
+        return
+
+    orch = _orchestrator
+    if orch is None:
+        return
+
+    job_id = getattr(orch, "job_id", None)
+    if not job_id:
+        return
+
+    try:
+        orch.request_cancel()
+    except Exception:
+        pass
+
+    try:
+        orch.stop_tunnel()
+    except Exception:
+        pass
+
+    ok, msg = orch.delete_job()
+
+    _set_hpc_cancel_requested(False)
+    _set_active_mode(None)
+    _set_status(
+        OrchestratorState.IDLE.value,
+        f"HPC job cancelled: {job_id}\n\n{msg}",
+        server_mode=ServerMode.HPC,
+    )
+
+
+# ============================================================
+# Orchestrator callback + thread start
 # ============================================================
 
 def _on_state_change(state: OrchestratorState, message: str) -> None:
-    # Orchestrator = HPC, so keep display mode consistent
     _set_status(state.value, message, server_mode=ServerMode.HPC)
     print(f"[DASHBOARD][HPC] {state.value}: {message}")
 
+    _attempt_cancel_hpc_if_requested()
+
+    if state in {
+        OrchestratorState.CANCELLED,
+        OrchestratorState.ERROR_JOB_SUBMISSION,
+        OrchestratorState.ERROR_JOB_STARTUP,
+        OrchestratorState.ERROR_TUNNEL_START,
+        OrchestratorState.ERROR_SERVER_UNHEALTHY,
+        OrchestratorState.ERROR_TUNNEL_BROKEN,
+        OrchestratorState.ERROR_STOP,
+    }:
+        _set_active_mode(None)
 
 def _start_orchestrator_thread() -> bool:
     global _orchestrator, _orch_thread
@@ -318,10 +351,7 @@ def _start_orchestrator_thread() -> bool:
         _orchestrator = orch
 
         def _run():
-            try:
-                orch.run_full_sequence()
-            finally:
-                pass
+            orch.run_full_sequence()
 
         t = threading.Thread(target=_run, daemon=True)
         _orch_thread = t
@@ -330,82 +360,184 @@ def _start_orchestrator_thread() -> bool:
 
 
 # ============================================================
-# Start local policy server (with logs + fail-fast)
+# Local policy server start/stop (WORKING METHOD + safe process-group)
 # ============================================================
 
-def _start_local_policy_server() -> None:
+def _make_child_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+    # Ensure repository imports work even when launched from a subprocess
+    src_path = str(OPENPI_ROOT / "src")
+    env["PYTHONPATH"] = src_path + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    return env
+
+def _popen_kwargs_new_session() -> dict[str, Any]:
+    # Prevent stop from killing the dashboard process group
+    if os.name != "nt":
+        return {"start_new_session": True}
+    # On Windows, best-effort equivalent:
+    return {}
+
+def _local_server_log_reader(proc: subprocess.Popen) -> None:
+    global _local_server_process
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            _append_local_server_log(line)
+    except Exception as e:
+        _append_local_server_log(f"[dashboard] Error reading local policy output: {e}")
+    finally:
+        rc = proc.wait()
+        _set_local_server_returncode(rc)
+        _append_local_server_log(f"[dashboard] Local policy server exited with return code {rc}")
+
+        with _local_server_lock:
+            _local_server_process = None
+
+        if _get_active_mode() == ServerMode.LOCAL:
+            _set_active_mode(None)
+
+        if rc != 0:
+            _set_status(
+                "ERROR_LOCAL_EXIT",
+                f"Local policy server exited (rc={rc}). See Policy Server Log.",
+                server_mode=ServerMode.LOCAL,
+            )
+        else:
+            _set_status(
+                OrchestratorState.IDLE.value,
+                "Local policy server stopped.",
+                server_mode=ServerMode.LOCAL,
+            )
+
+def _start_local_policy_server_blocking() -> None:
     global _local_server_process
 
     with _local_server_lock:
         if _local_server_process is not None and _local_server_process.poll() is None:
             raise RuntimeError("Local policy server is already running.")
 
-    # Clear old logs
     with _local_server_log_lock:
         _local_server_log_lines.clear()
-        _local_server_returncode = None
+        _set_local_server_returncode(None)
 
     _set_status("STARTING_LOCAL", "Starting local policy server...", server_mode=ServerMode.LOCAL)
 
+    # Use the SAME working command shape as your previous “working local” version,
+    # but with safer env + new session so we can stop it safely.
     cmd = [
-        "uv",
-        "run",
+        "uv", "run",
         "scripts/serve_policy.py",
-        "--env",
-        "DEMO",
-        "--port",
-        XARM_PORT,
+        "--env", "DEMO",
+        "--port", str(XARM_PORT),
     ]
 
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            cwd=str(OPENPI_ROOT),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-    except Exception as e:
-        raise RuntimeError(f"Failed to start local policy server: {e}") from e
+    env = _make_child_env()
+
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(OPENPI_ROOT),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        **_popen_kwargs_new_session(),
+    )
 
     with _local_server_lock:
         _local_server_process = proc
 
     _append_local_server_log("[dashboard] Launched local policy server process.")
-    _append_local_server_log(f"[dashboard] CWD: {OPENPI_ROOT}")
+    _append_local_server_log(f"[dashboard] OPENPI_ROOT: {OPENPI_ROOT}")
     _append_local_server_log(f"[dashboard] CMD: {' '.join(cmd)}")
 
-    # Start log reader immediately
     threading.Thread(target=_local_server_log_reader, args=(proc,), daemon=True).start()
 
-    # Wait for it to become healthy OR die (and capture its traceback)
-    try:
-        _set_status("CHECKING_LOCAL_HEALTH", "Waiting for local server to become healthy...", server_mode=ServerMode.LOCAL)
-        _wait_for_local_server_healthy(proc, timeout_s=240.0, poll_s=2.0)
-    except RuntimeError as e:
-        # Make error visible in UI
-        _set_status("ERROR_LOCAL_START", f"Local server failed to start.\n\n{e}", server_mode=ServerMode.LOCAL)
-        # Active mode should clear (server isn't running)
-        _set_active_mode(None)
-        raise
+    _set_status("CHECKING_LOCAL_HEALTH", "Waiting for local server to become healthy...", server_mode=ServerMode.LOCAL)
+    _wait_for_local_server_healthy(proc, timeout_s=900.0, poll_s=2.0)
 
-    _set_status(OrchestratorState.READY.value, f"Local policy server healthy on ws://localhost:{XARM_PORT}", server_mode=ServerMode.LOCAL)
+    _set_status(
+        OrchestratorState.READY.value,
+        f"Local policy server healthy on ws://localhost:{XARM_PORT}",
+        server_mode=ServerMode.LOCAL,
+    )
+
+def _start_local_policy_server_async() -> bool:
+    global _local_start_thread
+
+    with _local_start_thread_lock:
+        if _local_start_thread is not None and _local_start_thread.is_alive():
+            return False
+        if _local_server_running():
+            return False
+
+        def _run():
+            try:
+                _start_local_policy_server_blocking()
+            except Exception as e:
+                _set_active_mode(None)
+                _set_status("ERROR_LOCAL_START", f"Local server failed to start.\n\n{e}", server_mode=ServerMode.LOCAL)
+
+        _local_start_thread = threading.Thread(target=_run, daemon=True)
+        _local_start_thread.start()
+        return True
+
+def _stop_local_policy_server() -> tuple[bool, str]:
+    global _local_server_process
+
+    with _local_server_lock:
+        proc = _local_server_process
+
+    if proc is None or proc.poll() is not None:
+        return False, "Local policy server is not running."
+
+    _set_status("STOPPING_LOCAL", "Stopping local policy server...", server_mode=ServerMode.LOCAL)
+
+    try:
+        if os.name != "nt":
+            # Kill the process group/session we created
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        else:
+            proc.terminate()
+    except Exception as e:
+        return False, f"Failed to stop local server: {e}"
+
+    # Give it a moment then SIGKILL if needed
+    for _ in range(30):  # ~3s
+        if proc.poll() is not None:
+            break
+        time.sleep(0.1)
+
+    if proc.poll() is None and os.name != "nt":
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except Exception as e:
+            return False, f"Failed to SIGKILL local server group: {e}"
+
+    with _local_server_lock:
+        _local_server_process = None
+
+    _set_active_mode(None)
+    _set_status(OrchestratorState.IDLE.value, "Local policy server stopped.", server_mode=ServerMode.LOCAL)
+    return True, "Local policy server stopped."
 
 
 # ============================================================
 # Camera backends
 # ============================================================
 
-base_camera = ZmqCameraBackend(host="127.0.0.1", port=5000, img_size=None, name="base", target_fps=15.0)
-wrist_camera = ZmqCameraBackend(host="127.0.0.1", port=5001, img_size=None, name="wrist", target_fps=15.0)
+# Keep your WSL-host bridge addresses (your newer setup)
+base_camera = ZmqCameraBackend(host="172.23.224.1", port=5000, img_size=None, name="base", target_fps=15.0)
+wrist_camera = ZmqCameraBackend(host="172.23.224.1", port=5001, img_size=None, name="wrist", target_fps=15.0)
 
 # ============================================================
 # HTML Frontend
 # ============================================================
 
-_INDEX_PATH = Path(__file__).with_name("index.html")
+_INDEX_PATH = HERE / "index.html"
 INDEX_HTML = _INDEX_PATH.read_text(encoding="utf-8")
+
 
 # ============================================================
 # Request models
@@ -414,10 +546,8 @@ INDEX_HTML = _INDEX_PATH.read_text(encoding="utf-8")
 class RunXarmRequest(BaseModel):
     prompt: Optional[str] = None
 
-
 class RunServerRequest(BaseModel):
-    mode: ServerMode = ServerMode.LOCAL  # default local now
-
+    mode: ServerMode = ServerMode.LOCAL
 
 class SetModeRequest(BaseModel):
     mode: ServerMode
@@ -434,13 +564,8 @@ def index() -> str:
 
 @app.post("/api/set-mode", response_class=JSONResponse)
 def api_set_mode(req: SetModeRequest) -> Dict[str, Any]:
-    """
-    Persist the user's selected mode in the backend (while idle).
-    If something is running/busy, we reject to avoid mislabeling.
-    """
     if _any_server_running_or_busy():
         raise HTTPException(status_code=409, detail="Cannot change mode while a server is running or starting.")
-
     _set_preferred_mode(req.mode)
     _set_status(OrchestratorState.IDLE.value, f"Mode set to {req.mode.value.upper()}.", server_mode=req.mode)
     return {"status": "ok", "preferred_mode": req.mode.value}
@@ -451,29 +576,24 @@ def api_status() -> Dict[str, Any]:
     with _status_lock:
         state = _last_status["state"]
         message = _last_status["message"]
+        server_mode = _last_status.get("server_mode", _get_display_mode().value)
 
-    # Determine running/busy
     with _orch_thread_lock:
         hpc_thread_alive = _orch_thread is not None and _orch_thread.is_alive()
+
+    local_thread_alive = _local_starting()
 
     orch = _orchestrator
     hpc_ready = orch is not None and orch.state == OrchestratorState.READY
     local_ready = _local_server_running()
 
-    # If local was active but died, clear active
-    if _get_active_mode() == ServerMode.LOCAL and not local_ready:
-        _set_active_mode(None)
-
-    # For display, report active if running/busy else preferred
-    display_mode = _get_display_mode().value
     server_running = bool(hpc_ready or local_ready)
-    busy = bool(hpc_thread_alive or (state not in ["IDLE", "READY"] and not state.startswith("ERROR") and not server_running))
+    busy = bool(hpc_thread_alive or local_thread_alive)
 
-    # Job/tunnel info only meaningful in HPC mode
-    job_id = orch.job_id if orch is not None else None
-    remote_ip = orch.remote_ip if orch is not None else None
-    remote_port = orch.remote_port if orch is not None else None
-    if display_mode == ServerMode.LOCAL.value:
+    job_id = getattr(orch, "job_id", None) if orch is not None else None
+    remote_ip = getattr(orch, "remote_ip", None) if orch is not None else None
+    remote_port = getattr(orch, "remote_port", None) if orch is not None else None
+    if server_mode == ServerMode.LOCAL.value:
         job_id = None
         remote_ip = None
         remote_port = None
@@ -486,31 +606,38 @@ def api_status() -> Dict[str, Any]:
         "remote_port": remote_port,
         "server_running": server_running,
         "busy": busy,
-        "server_mode": display_mode,  # what UI should show/reflect
+        "server_mode": server_mode,
         "preferred_mode": _get_preferred_mode().value,
         "active_mode": (_get_active_mode().value if _get_active_mode() is not None else None),
         "hpc_running": bool(hpc_ready),
         "local_running": bool(local_ready),
+        "hpc_cancel_requested": _get_hpc_cancel_requested(),
+        "openpi_root": str(OPENPI_ROOT),
     }
 
 
 @app.get("/api/policy-server-log", response_class=JSONResponse)
 def api_policy_server_log() -> Dict[str, Any]:
-    """
-    Return local policy server stdout/stderr log (rolling).
-    For HPC mode, we don't have a live stream here; UI will still show orchestrator message.
-    """
     with _local_server_log_lock:
         log = "\n".join(_local_server_log_lines)
         rc = _local_server_returncode
-
-    running = _local_server_running()
     return {
         "mode": _get_display_mode().value,
-        "local_running": running,
+        "local_running": _local_server_running(),
         "local_returncode": rc,
         "log": log,
     }
+
+
+@app.get("/api/hpc-diagnostics", response_class=JSONResponse)
+def api_hpc_diagnostics() -> Dict[str, Any]:
+    orch = _orchestrator
+    if orch is None:
+        return {"ok": False, "diagnostics": "Orchestrator not initialized yet."}
+    try:
+        return {"ok": True, "diagnostics": orch.collect_diagnostics()}
+    except Exception as e:
+        return {"ok": False, "diagnostics": f"Failed to collect diagnostics: {e}"}
 
 
 @app.post("/api/run-server", response_class=JSONResponse)
@@ -518,42 +645,63 @@ def api_run_server(req: RunServerRequest) -> Dict[str, Any]:
     if _any_server_running_or_busy():
         raise HTTPException(status_code=409, detail="Policy server already running (HPC or local).")
 
-    # Persist preferred mode to whatever user is launching
     _set_preferred_mode(req.mode)
 
     if req.mode == ServerMode.HPC:
         _set_active_mode(ServerMode.HPC)
+        _set_hpc_cancel_requested(False)
         _set_status(OrchestratorState.SUBMITTING_JOB.value, "Submitting policy server job...", server_mode=ServerMode.HPC)
 
         started = _start_orchestrator_thread()
         if not started:
             _set_active_mode(None)
             raise HTTPException(status_code=409, detail="Server orchestration already running or server already READY.")
-
         return {"status": "started", "mode": "hpc"}
 
-    # LOCAL
+    # LOCAL (async so the dashboard never blocks)
     _set_active_mode(ServerMode.LOCAL)
-    try:
-        _start_local_policy_server()
-    except RuntimeError as e:
-        # /api/start-local already set ERROR_LOCAL_START with details
-        raise HTTPException(status_code=500, detail=str(e))
+    started = _start_local_policy_server_async()
+    if not started:
+        _set_active_mode(None)
+        raise HTTPException(status_code=409, detail="Local server is already starting or running.")
+    return {"status": "starting", "mode": "local"}
 
-    return {"status": "started", "mode": "local"}
+
+@app.post("/api/stop-server", response_class=JSONResponse)
+def api_stop_server() -> Dict[str, Any]:
+    mode = _get_active_mode() or _get_display_mode()
+
+    if mode == ServerMode.LOCAL:
+        ok, detail = _stop_local_policy_server()
+        if not ok:
+            raise HTTPException(status_code=400, detail=detail)
+        return {"status": "stopped", "mode": "local", "detail": detail}
+
+    orch = _orchestrator
+    _set_active_mode(ServerMode.HPC)
+    _set_hpc_cancel_requested(True)
+    _set_status("CANCEL_REQUESTED", "Cancelling HPC server/job...", server_mode=ServerMode.HPC)
+
+    if orch is not None:
+        try:
+            orch.request_cancel()
+        except Exception:
+            pass
+
+    _attempt_cancel_hpc_if_requested()
+
+    return {
+        "status": "cancelling",
+        "mode": "hpc",
+        "detail": "Cancel requested. If job_id is already known it will be qdel'd immediately; otherwise it will be deleted as soon as it appears.",
+    }
 
 
 @app.get("/api/health", response_class=JSONResponse)
 def api_health() -> Dict[str, Any]:
-    """
-    Health check:
-    - HPC: orchestrator websocket check
-    - LOCAL: websocket handshake check on localhost
-    """
     mode = _get_display_mode()
-
     if mode == ServerMode.LOCAL:
-        ok, msg = _ws_health_once(int(XARM_PORT), timeout_s=3.0)
+        ok, msg = _ws_health_once("127.0.0.1", XARM_PORT, timeout_s=3.0)
         return {"status": "healthy" if ok else "unhealthy", "detail": msg}
 
     orch = _orchestrator
@@ -576,17 +724,13 @@ def api_start_cameras() -> Dict[str, Any]:
             raise HTTPException(status_code=409, detail="Camera server already running.")
 
         cmd = ["bash", str(PIPELINE_SCRIPT), "cameras"]
-
-        try:
-            proc = subprocess.Popen(
-                cmd,
-                cwd=str(REPO_ROOT),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to start camera server: {e}")
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(HERE),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
 
         time.sleep(3.0)
         ret = proc.poll()
@@ -631,8 +775,24 @@ def api_camera_status() -> Dict[str, Any]:
 
 
 # ============================================================
-# xArm client API
+# xArm client API (FIXED)
 # ============================================================
+
+def _xarm_log_reader(proc: subprocess.Popen) -> None:
+    global _xarm_process
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            _append_xarm_log(line)
+    except Exception as e:
+        _append_xarm_log(f"[dashboard] Error reading xArm client output: {e}")
+    finally:
+        rc = proc.wait()
+        _set_xarm_returncode(rc)
+        _append_xarm_log(f"[dashboard] xArm client exited with return code {rc}")
+        with _xarm_lock:
+            if _xarm_process is proc:
+                _xarm_process = None
 
 @app.post("/api/run-xarm", response_class=JSONResponse)
 def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
@@ -650,35 +810,43 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
 
         prompt = (req.prompt or DEFAULT_XARM_PROMPT).strip() or DEFAULT_XARM_PROMPT
 
+        # Match your known-good CLI shape, but make it robust with env/cwd.
         cmd = [
-            "uv",
-            "run",
+            "uv", "run",
             "src/xarm6_control/main2.py",
-            "--remote_host",
-            "localhost",
-            "--remote_port",
-            XARM_PORT,
-            "--prompt",
-            prompt,
+            "--remote_host", "localhost",
+            "--remote_port", str(XARM_PORT),
+            "--prompt", prompt,
         ]
 
-        try:
-            proc = subprocess.Popen(
-                cmd,
-                cwd=str(OPENPI_ROOT),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to start xArm client: {e}")
+        env = _make_child_env()
+
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(OPENPI_ROOT),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            **_popen_kwargs_new_session(),
+        )
 
         _xarm_process = proc
         _xarm_log_lines.clear()
+        _set_xarm_returncode(None)
+
         _append_xarm_log("[dashboard] Starting xArm client...")
+        _append_xarm_log(f"[dashboard] OPENPI_ROOT: {OPENPI_ROOT}")
+        _append_xarm_log(f"[dashboard] CMD: {' '.join(cmd)}")
         _append_xarm_log(f"[dashboard] Prompt: {prompt}")
 
         threading.Thread(target=_xarm_log_reader, args=(proc,), daemon=True).start()
+
+    # Fail-fast: if it dies immediately, surface that quickly
+    time.sleep(0.4)
+    if proc.poll() is not None:
+        raise HTTPException(status_code=500, detail="xArm client exited immediately. Check the xArm Client log box.")
 
     return {"status": "started"}
 
@@ -693,8 +861,11 @@ def api_stop_xarm() -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="xArm client is not running.")
 
     try:
-        proc.terminate()
-        _append_xarm_log("[dashboard] Sent terminate() to xArm client.")
+        if os.name != "nt":
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        else:
+            proc.terminate()
+        _append_xarm_log("[dashboard] Sent stop signal to xArm client.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to stop xArm client: {e}")
 
@@ -705,15 +876,11 @@ def api_stop_xarm() -> Dict[str, Any]:
 def api_xarm_status() -> Dict[str, Any]:
     with _xarm_lock:
         proc = _xarm_process
-        if proc is None:
-            running = False
-            returncode = None
-        else:
-            running = proc.poll() is None
-            returncode = proc.returncode
+        running = (proc is not None and proc.poll() is None)
+        rc = _xarm_returncode if not running else None
         log = "\n".join(_xarm_log_lines)
 
-    return {"running": running, "returncode": returncode, "log": log}
+    return {"running": running, "returncode": rc, "log": log}
 
 
 # ============================================================
@@ -722,7 +889,6 @@ def api_xarm_status() -> Dict[str, Any]:
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(
         "xarm6_control.dashboard.dashboard_app:app",
         host="0.0.0.0",
