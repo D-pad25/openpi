@@ -210,8 +210,8 @@ def _any_server_running_or_busy() -> bool:
 # Health checking
 # ============================================================
 
-def _ws_health_once(port: int, timeout_s: float = 3.0) -> tuple[bool, str]:
-    uri = f"ws://localhost:{port}"
+def _ws_health_once(host: str, port: int, timeout_s: float = 3.0) -> tuple[bool, str]:
+    uri = f"ws://{host}:{port}"
     try:
         ws = websockets.sync.client.connect(
             uri,
@@ -219,39 +219,39 @@ def _ws_health_once(port: int, timeout_s: float = 3.0) -> tuple[bool, str]:
             close_timeout=timeout_s,
         )
         ws.close()
-        return True, "WebSocket handshake succeeded."
+        return True, f"WebSocket handshake succeeded at {uri}."
     except Exception as e:
-        return False, str(e)
+        return False, f"{uri} -> {type(e).__name__}: {e}"
 
 
-def _wait_for_local_server_healthy(proc: subprocess.Popen, timeout_s: float = 240.0, poll_s: float = 2.0) -> None:
+def _wait_for_local_server_healthy(proc: subprocess.Popen, timeout_s: float = 900.0, poll_s: float = 2.0) -> None:
     deadline = time.time() + timeout_s
     port = int(XARM_PORT)
+
+    last_log_t = 0.0
+    last_msg = ""
 
     while time.time() < deadline:
         ret = proc.poll()
         if ret is not None:
-            # pull any remaining buffered output
-            try:
-                out, _ = proc.communicate(timeout=1.0)
-            except Exception:
-                out = ""
-            if out:
-                for line in out.splitlines():
-                    _append_local_server_log(line)
             _set_local_server_returncode(ret)
-            raise RuntimeError(
-                f"Local policy server exited during startup (rc={ret}).\n\n{out or '<no output>'}"
-            )
+            raise RuntimeError(f"Local policy server exited during startup (rc={ret}). See Policy Server Log.")
 
-        ok, msg = _ws_health_once(port, timeout_s=2.0)
+        ok, msg = _ws_health_once("127.0.0.1", port, timeout_s=2.0)
         if ok:
             return
 
-        _append_local_server_log(f"[dashboard] Waiting for local server health... ({msg})")
+        # Throttle identical spam
+        now = time.time()
+        if msg != last_msg or (now - last_log_t) > 10.0:
+            _append_local_server_log(f"[dashboard] Waiting for local server health... ({msg})")
+            last_msg = msg
+            last_log_t = now
+
         time.sleep(poll_s)
 
     raise RuntimeError(f"Timed out waiting for local server to become healthy (>{timeout_s}s).")
+
 
 
 # ============================================================
@@ -412,8 +412,8 @@ def _start_local_policy_server_blocking() -> None:
 
     # IMPORTANT: avoid nested `uv run ...` from a process already started by uv
     cmd = [
-        sys.executable,
-        "-u",
+        "uv",
+        "run",
         "scripts/serve_policy.py",
         "--env",
         "DEMO",
@@ -421,15 +421,19 @@ def _start_local_policy_server_blocking() -> None:
         XARM_PORT,
     ]
 
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+
     try:
         proc = subprocess.Popen(
             cmd,
             cwd=str(OPENPI_ROOT),
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            start_new_session=True,  # lets us kill the whole process group
+            start_new_session=True,
         )
     except Exception as e:
         raise RuntimeError(f"Failed to start local policy server: {e}") from e
@@ -797,7 +801,7 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
             "run",
             "src/xarm6_control/main2.py",
             "--remote_host",
-            "localhost",
+            "127.0.0.1",
             "--remote_port",
             XARM_PORT,
             "--prompt",
