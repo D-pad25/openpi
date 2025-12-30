@@ -36,6 +36,7 @@ import websockets.sync.client
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
+import paramiko
 
 from xarm6_control.dashboard.xarm_server_orchestrator import (
     Orchestrator,
@@ -96,6 +97,12 @@ class RunServerRequest(BaseModel):
 
 class SetModeRequest(BaseModel):
     mode: ServerMode
+
+
+class HpcConnectRequest(BaseModel):
+    host: Optional[str] = None
+    username: str
+    password: str
 
 
 @dataclass(frozen=True)
@@ -305,6 +312,9 @@ class DashboardController:
 
         # HPC orchestration
         self._hpc_cancel_requested: bool = False
+        self._hpc_host: str = "aqua.qut.edu.au"
+        self._hpc_username: Optional[str] = None
+        self._hpc_password: Optional[str] = None  # in-memory only; never persisted/logged
         self._orchestrator: Optional[Orchestrator] = None
         self._orch_thread: Optional[threading.Thread] = None
 
@@ -447,7 +457,20 @@ class DashboardController:
         if self._orchestrator is not None and self._orchestrator.state == OrchestratorState.READY:
             return False
 
-        config = OrchestratorConfig()
+        if not self._hpc_username or not self._hpc_password:
+            # Caller should ensure credentials are set; keep error explicit for UI.
+            self._emit_state_for_ui_error(
+                "HPC credentials not set. Click HPC and connect with username/password.",
+                OrchestratorState.ERROR_JOB_SUBMISSION,
+            )
+            return False
+
+        config = OrchestratorConfig(
+            host=self._hpc_host,
+            username=self._hpc_username,
+            password=self._hpc_password,
+            repo_dir=f"/home/{self._hpc_username}/openpi",
+        )
         orch = Orchestrator(config=config)
         orch.on_state_change = self._on_orchestrator_state_change
         self._orchestrator = orch
@@ -459,6 +482,9 @@ class DashboardController:
         self._orch_thread = t
         t.start()
         return True
+
+    def _emit_state_for_ui_error(self, msg: str, state: OrchestratorState) -> None:
+        self._set_status(state=state.value, message=msg, server_mode=ServerMode.HPC)
 
     # -------------------- local policy server --------------------
 
@@ -551,6 +577,65 @@ class DashboardController:
         self._set_status(state=OrchestratorState.IDLE.value, message=f"Mode set to {mode.value.upper()}.", server_mode=mode)
         return {"status": "ok", "preferred_mode": mode.value}
 
+    # -------------------- HPC credential session --------------------
+
+    def hpc_session(self) -> Dict[str, Any]:
+        return {
+            "connected": bool(self._hpc_username and self._hpc_password),
+            "host": self._hpc_host,
+            "username": self._hpc_username,
+        }
+
+    def clear_hpc_session(self) -> Dict[str, Any]:
+        # Stability: don't allow clearing creds while orchestration may still need them (cancel, qdel, tunnel).
+        if self._any_server_running_or_busy():
+            raise HTTPException(status_code=409, detail="Cannot clear HPC credentials while server is running/starting. Stop the server first.")
+        self._hpc_username = None
+        self._hpc_password = None
+        self._orchestrator = None
+        self._orch_thread = None
+        return {"status": "cleared"}
+
+    def connect_hpc(self, host: Optional[str], username: str, password: str) -> Dict[str, Any]:
+        if self._any_server_running_or_busy():
+            raise HTTPException(status_code=409, detail="Cannot change HPC credentials while server is running/starting.")
+
+        host_final = (host or self._hpc_host).strip() or self._hpc_host
+        username_final = username.strip()
+        if not username_final:
+            raise HTTPException(status_code=400, detail="username is required")
+        if not password:
+            raise HTTPException(status_code=400, detail="password is required")
+
+        # Validate credentials immediately, but never log the password.
+        try:
+            c = paramiko.SSHClient()
+            c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            c.connect(
+                hostname=host_final,
+                port=22,
+                username=username_final,
+                password=password,
+                allow_agent=False,
+                look_for_keys=False,
+                timeout=10.0,
+                banner_timeout=10.0,
+                auth_timeout=10.0,
+            )
+            stdin, stdout, stderr = c.exec_command("echo connected", timeout=10.0)
+            _ = stdout.read()
+            _ = stderr.read()
+            c.close()
+        except paramiko.AuthenticationException:
+            raise HTTPException(status_code=401, detail="Authentication failed. Check username/password.")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to connect to HPC: {type(e).__name__}: {e}")
+
+        self._hpc_host = host_final
+        self._hpc_username = username_final
+        self._hpc_password = password
+        return {"status": "connected", "host": self._hpc_host, "username": self._hpc_username}
+
     def status(self) -> Dict[str, Any]:
         s = self._status
 
@@ -615,6 +700,8 @@ class DashboardController:
         self._preferred_mode = mode
 
         if mode == ServerMode.HPC:
+            if not (self._hpc_username and self._hpc_password):
+                raise HTTPException(status_code=400, detail="HPC credentials not set. Please connect first.")
             self._active_mode = ServerMode.HPC
             self._hpc_cancel_requested = False
             self._set_status(
@@ -825,6 +912,21 @@ def api_health() -> Dict[str, Any]:
 @app.post("/api/start-cameras", response_class=JSONResponse)
 def api_start_cameras() -> Dict[str, Any]:
     return controller.start_cameras()
+
+
+@app.get("/api/hpc/session", response_class=JSONResponse)
+def api_hpc_session() -> Dict[str, Any]:
+    return controller.hpc_session()
+
+
+@app.post("/api/hpc/connect", response_class=JSONResponse)
+def api_hpc_connect(req: HpcConnectRequest) -> Dict[str, Any]:
+    return controller.connect_hpc(req.host, req.username, req.password)
+
+
+@app.post("/api/hpc/clear", response_class=JSONResponse)
+def api_hpc_clear() -> Dict[str, Any]:
+    return controller.clear_hpc_session()
 
 
 @app.get("/video/base")

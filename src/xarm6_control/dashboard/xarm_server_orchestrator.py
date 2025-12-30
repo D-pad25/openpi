@@ -20,13 +20,14 @@ from __future__ import annotations
 import enum
 import re
 import shlex
-import subprocess
+import socket
+import socketserver
 import time
 import threading
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Callable, Optional, Tuple
 
+import paramiko
 import websockets.sync.client
 
 
@@ -36,14 +37,17 @@ import websockets.sync.client
 
 @dataclass
 class OrchestratorConfig:
-    # SSH alias or user@host
-    hpc_prefix: str = "aqua"
+    # SSH target
+    host: str = "aqua.qut.edu.au"
+    port: int = 22
+    username: str = ""
+    password: str = ""
 
-    # Directory where this file lives: src/xarm6_control/dashboard (or similar)
-    here: Path = Path(__file__).resolve().parent
+    # Repo path assumption (required by dashboard spec)
+    repo_dir: str = ""
 
-    # Pipeline script lives alongside this orchestrator
-    pipeline_script: Path = field(init=False)
+    # Virtualenv inside repo
+    venv_dir: str = ".venv"
 
     # Local port to expose the policy server through the tunnel
     policy_port: int = 8000
@@ -67,8 +71,12 @@ class OrchestratorConfig:
     tunnel_start_grace_s: float = 1.0
 
     def __post_init__(self) -> None:
-        self.pipeline_script = self.here / "xarm_pipeline.sh"
-        print(f"[CONFIG] Using pipeline script at: {self.pipeline_script}")
+        if not self.username:
+            raise ValueError("OrchestratorConfig.username is required")
+        if not self.password:
+            raise ValueError("OrchestratorConfig.password is required")
+        if not self.repo_dir:
+            self.repo_dir = f"/home/{self.username}/openpi"
 
 
 # ============================
@@ -109,7 +117,11 @@ class Orchestrator:
     job_id: Optional[str] = None
     remote_ip: Optional[str] = None
     remote_port: Optional[int] = None
-    tunnel_process: Optional[subprocess.Popen] = None
+
+    # Paramiko tunnel server (local listener that forwards to remote_ip:remote_port via SSH transport)
+    _tunnel_server: Optional[socketserver.ThreadingTCPServer] = None
+    _tunnel_thread: Optional[threading.Thread] = None
+    _tunnel_transport: Optional[paramiko.Transport] = None
 
     # cancellation flag
     _cancel: threading.Event = field(default_factory=threading.Event, init=False)
@@ -131,23 +143,46 @@ class Orchestrator:
         else:
             print(f"[STATE] {state.value}: {message}")
 
-    def _run_local(self, cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
-        """Run a local command and capture stdout/stderr."""
-        return subprocess.run(cmd, check=check, text=True, capture_output=True)
+    def _ssh_client(self) -> paramiko.SSHClient:
+        """
+        Create a short-lived SSH client.
 
-    def _run_local_stream(self, cmd: list[str]) -> subprocess.Popen:
-        """Run a local long-lived command (e.g. ssh tunnel)."""
-        return subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+        Important:
+        - Never log the password.
+        - Keep password in memory only (caller owns config).
+        """
+        c = paramiko.SSHClient()
+        c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        c.connect(
+            hostname=self.config.host,
+            port=self.config.port,
+            username=self.config.username,
+            password=self.config.password,
+            allow_agent=False,
+            look_for_keys=False,
+            timeout=10.0,
+            banner_timeout=10.0,
+            auth_timeout=10.0,
         )
+        return c
 
-    def _ssh_hpc(self, remote_cmd: str, check: bool = True) -> subprocess.CompletedProcess:
-        """Run a command on the HPC via SSH."""
-        cmd = ["ssh", self.config.hpc_prefix, remote_cmd]
-        return self._run_local(cmd, check=check)
+    def _run_remote(self, remote_cmd: str, timeout_s: float = 60.0) -> Tuple[int, str, str]:
+        """
+        Run a remote command over SSH and return (exit_status, stdout, stderr).
+        """
+        client = self._ssh_client()
+        try:
+            stdin, stdout, stderr = client.exec_command(remote_cmd, get_pty=False, timeout=timeout_s)
+            # Ensure output is drained before exit status retrieval.
+            out_s = stdout.read().decode("utf-8", errors="replace")
+            err_s = stderr.read().decode("utf-8", errors="replace")
+            rc = stdout.channel.recv_exit_status()
+            return rc, out_s, err_s
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
 
     # --- remote path quoting helpers (CRITICAL for $HOME/~/ expansion) ---
 
@@ -173,15 +208,18 @@ class Orchestrator:
         """Run fn() and return stdout/stderr as a debug block without raising."""
         try:
             out = fn()
-            if isinstance(out, subprocess.CompletedProcess):
+            if isinstance(out, tuple) and len(out) == 3:
+                rc, stdout_s, stderr_s = out
                 s = ""
-                if out.stdout:
-                    s += out.stdout.strip()
-                if out.stderr:
+                if stdout_s:
+                    s += stdout_s.strip()
+                if stderr_s:
                     if s:
                         s += "\n"
-                    s += out.stderr.strip()
-                return f"--- {label} ---\n{s.strip() or '<no output>'}"
+                    s += stderr_s.strip()
+                if not s.strip():
+                    s = "<no output>"
+                return f"--- {label} ---\n{s.strip()}"
             return f"--- {label} ---\n{str(out).strip()}"
         except Exception as e:
             return f"--- {label} ---\n<failed: {e}>"
@@ -192,13 +230,13 @@ class Orchestrator:
 
         if self.job_id:
             jid = shlex.quote(self.job_id)
-            blocks.append(self._best_effort("qstat", lambda: self._ssh_hpc(f"qstat {jid} 2>&1 || true", check=False)))
-            blocks.append(self._best_effort("qstat -f", lambda: self._ssh_hpc(f"qstat -f {jid} 2>&1 || true", check=False)))
-            blocks.append(self._best_effort("qpeek", lambda: self._ssh_hpc(f"qpeek {jid} 2>&1 || true", check=False)))
+            blocks.append(self._best_effort("qstat", lambda: self._run_remote(f"qstat {jid} 2>&1 || true")))
+            blocks.append(self._best_effort("qstat -f", lambda: self._run_remote(f"qstat -f {jid} 2>&1 || true")))
+            blocks.append(self._best_effort("qpeek", lambda: self._run_remote(f"qpeek {jid} 2>&1 || true")))
 
         ef = self._dq(self._remote_path(self.config.endpoint_file))
-        blocks.append(self._best_effort("endpoint ls", lambda: self._ssh_hpc(f"ls -l {ef} 2>&1 || true", check=False)))
-        blocks.append(self._best_effort("endpoint cat", lambda: self._ssh_hpc(f"cat {ef} 2>&1 || true", check=False)))
+        blocks.append(self._best_effort("endpoint ls", lambda: self._run_remote(f"ls -l {ef} 2>&1 || true")))
+        blocks.append(self._best_effort("endpoint cat", lambda: self._run_remote(f"cat {ef} 2>&1 || true")))
 
         return "\n\n".join(blocks).strip()
 
@@ -209,25 +247,39 @@ class Orchestrator:
     # --------------- tunnel / job control ---------------
 
     def _tunnel_running(self) -> bool:
-        return self.tunnel_process is not None and self.tunnel_process.poll() is None
+        return bool(self._tunnel_thread is not None and self._tunnel_thread.is_alive() and self._tunnel_server is not None)
 
     def stop_tunnel(self) -> None:
-        """Terminate the SSH tunnel process if running."""
-        proc = self.tunnel_process
-        if proc is None:
-            return
-        if proc.poll() is not None:
-            self.tunnel_process = None
-            return
+        """Stop local forwarding server + underlying SSH transport."""
+        srv = self._tunnel_server
+        thr = self._tunnel_thread
+        transport = self._tunnel_transport
 
-        try:
-            proc.terminate()
+        self._tunnel_server = None
+        self._tunnel_thread = None
+        self._tunnel_transport = None
+
+        if srv is not None:
             try:
-                proc.wait(timeout=2.0)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-        finally:
-            self.tunnel_process = None
+                srv.shutdown()
+            except Exception:
+                pass
+            try:
+                srv.server_close()
+            except Exception:
+                pass
+
+        if thr is not None:
+            try:
+                thr.join(timeout=1.0)
+            except Exception:
+                pass
+
+        if transport is not None:
+            try:
+                transport.close()
+            except Exception:
+                pass
 
     def delete_job(self) -> Tuple[bool, str]:
         """Best-effort qdel of the current job_id (if known)."""
@@ -235,10 +287,10 @@ class Orchestrator:
             return False, "No job_id known; nothing to delete."
 
         jid = shlex.quote(self.job_id)
-        res = self._ssh_hpc(f"qdel {jid} 2>&1 || true", check=False)
-        out = (res.stdout or "") + ("\n" + res.stderr if res.stderr else "")
-        out = out.strip() or "<no output>"
-        return True, f"qdel {self.job_id}:\n{out}"
+        rc, out, err = self._run_remote(f"qdel {jid} 2>&1 || true")
+        msg = (out or "") + ("\n" + err if err else "")
+        msg = msg.strip() or "<no output>"
+        return True, f"qdel {self.job_id}:\n{msg}"
 
     def stop(self) -> None:
         """
@@ -285,14 +337,18 @@ class Orchestrator:
         )
         try:
             ef = self._dq(self._remote_path(self.config.endpoint_file))
-            self._ssh_hpc(f"rm -f {ef} 2>&1 || true", check=False)
+            self._run_remote(f"rm -f {ef} 2>&1 || true")
         except Exception as e:
             self.last_message = f"Failed to clear old endpoint file (non-fatal): {e}"
 
     # --------------- main steps ---------------
 
     def submit_policy_job(self) -> bool:
-        """Call ./xarm_pipeline.sh serve-policy and parse the job ID."""
+        """
+        Submit the policy server as a GPU job via qsub (credential-based SSH).
+
+        The dashboard assumes the OpenPI repo exists at: /home/<username>/openpi
+        """
         self.clear_remote_endpoint_file()
         if self._cancelled():
             self._emit_state(OrchestratorState.CANCELLED, "Cancelled before job submission.")
@@ -300,27 +356,60 @@ class Orchestrator:
 
         self._emit_state(
             OrchestratorState.SUBMITTING_JOB,
-            "Submitting policy server job via pipeline script...",
+            "Submitting policy server job via qsub...",
         )
 
+        # Command that runs on the GPU node (inside qsub script)
+        job_cmd = (
+            "export OPENPI_DATA_HOME=$HOME/.cache/openpi; "
+            "uv run scripts/serve_policy.py --env XARM --port 8000"
+        )
+
+        # Inline PBS script submitted from login node.
+        # Note: no secrets are embedded in the script; auth is handled by the SSH session.
+        pbs_script = f"""#!/bin/bash
+#PBS -N openpi_cmd
+#PBS -q gpu_inter
+#PBS -l select=1:ncpus=4:ngpus=1:mem=32gb
+#PBS -l walltime=01:00:00
+#PBS -j oe
+
+set -euo pipefail
+
+cd "{self.config.repo_dir}"
+source "{self.config.venv_dir}/bin/activate"
+
+NODE_HOST=$(hostname)
+NODE_IP=$(python -c 'import socket; print(socket.gethostbyname(socket.gethostname()))')
+
+echo "[openpi_cmd] Running on node: $NODE_HOST with IP: $NODE_IP"
+echo "[openpi_cmd] Using Python: $(which python)"
+echo "[openpi_cmd] Starting command: {job_cmd}"
+
+echo "HOST=$NODE_HOST" >  "$HOME/.openpi_policy_endpoint"
+echo "IP=$NODE_IP"     >> "$HOME/.openpi_policy_endpoint"
+echo "PORT=8000"       >> "$HOME/.openpi_policy_endpoint"
+
+{job_cmd}
+"""
+
+        # Feed the script via stdin to qsub.
+        remote_cmd = "qsub -V <<'EOF'\n" + pbs_script + "\nEOF\n"
+
         try:
-            result = self._run_local([str(self.config.pipeline_script), "serve-policy"], check=True)
-        except subprocess.CalledProcessError as e:
-            stdout = (e.stdout or "").strip()
-            stderr = (e.stderr or "").strip()
-            msg = "Failed to submit job.\n"
-            if stdout:
-                msg += f"\n--- pipeline stdout ---\n{stdout}"
-            if stderr:
-                msg += f"\n--- pipeline stderr ---\n{stderr}"
-            self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, msg.strip())
+            rc, stdout, stderr = self._run_remote(remote_cmd, timeout_s=60.0)
+        except paramiko.AuthenticationException:
+            self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, "HPC authentication failed. Check username/password/host.")
             return False
         except Exception as e:
-            self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, f"Failed to submit job: {e}")
+            self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, f"Failed to submit job: {type(e).__name__}: {e}")
             return False
 
-        stdout = (result.stdout or "").strip()
-        stderr = (result.stderr or "").strip()
+        stdout = (stdout or "").strip()
+        stderr = (stderr or "").strip()
+        if rc != 0 and not stdout and stderr:
+            self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, f"Failed to submit job.\n\n{stderr}".strip())
+            return False
 
         job_id = None
         candidates = re.findall(r"\b\d+(?:\.\w+)?\b", stdout)
@@ -335,9 +424,9 @@ class Orchestrator:
 
         msg = f"Job submitted. Job ID: {self.job_id or 'UNKNOWN'}; waiting for endpoint file..."
         if stdout:
-            msg += f"\n\n--- pipeline stdout ---\n{stdout}"
+            msg += f"\n\n--- qsub stdout ---\n{stdout}"
         if stderr:
-            msg += f"\n\n--- pipeline stderr ---\n{stderr}"
+            msg += f"\n\n--- qsub stderr ---\n{stderr}"
 
         self._emit_state(OrchestratorState.JOB_QUEUED, msg.strip())
         return True
@@ -362,8 +451,8 @@ class Orchestrator:
                 return False
 
             try:
-                result = self._ssh_hpc(f"cat {ef} 2>/dev/null || true", check=False)
-                content = (result.stdout or "").strip()
+                rc, out, err = self._run_remote(f"cat {ef} 2>/dev/null || true")
+                content = (out or "").strip()
             except Exception:
                 content = ""
 
@@ -419,40 +508,113 @@ class Orchestrator:
 
         self._emit_state(
             OrchestratorState.STARTING_TUNNEL,
-            f"Starting SSH tunnel localhost:{local_port} -> {self.remote_ip}:{remote_port} via {self.config.hpc_prefix}...",
+            f"Starting SSH tunnel localhost:{local_port} -> {self.remote_ip}:{remote_port} via {self.config.host}...",
         )
 
-        cmd = [
-            "ssh",
-            "-N",
-            "-o", "ExitOnForwardFailure=yes",
-            "-o", "ServerAliveInterval=30",
-            "-o", "ServerAliveCountMax=3",
-            "-L", f"{local_port}:{self.remote_ip}:{remote_port}",
-            self.config.hpc_prefix,
-        ]
+        try:
+            client = self._ssh_client()
+        except paramiko.AuthenticationException:
+            self._emit_state(OrchestratorState.ERROR_TUNNEL_START, "HPC authentication failed while starting tunnel.")
+            return False
+        except Exception as e:
+            self._emit_state(OrchestratorState.ERROR_TUNNEL_START, f"Failed to connect for tunnel: {type(e).__name__}: {e}")
+            return False
+
+        transport = client.get_transport()
+        if transport is None:
+            try:
+                client.close()
+            except Exception:
+                pass
+            self._emit_state(OrchestratorState.ERROR_TUNNEL_START, "Failed to create SSH transport for tunnel.")
+            return False
+
+        remote_host = self.remote_ip
+        remote_port_int = int(remote_port)
+
+        class _ForwardHandler(socketserver.BaseRequestHandler):
+            def handle(self) -> None:
+                try:
+                    chan = transport.open_channel(
+                        kind="direct-tcpip",
+                        dest_addr=(remote_host, remote_port_int),
+                        src_addr=self.request.getsockname(),
+                    )
+                except Exception:
+                    return
+
+                if chan is None:
+                    return
+
+                try:
+                    while True:
+                        r, _, _ = select.select([self.request, chan], [], [], 1.0)  # type: ignore[name-defined]
+                        if self.request in r:
+                            data = self.request.recv(16384)
+                            if not data:
+                                break
+                            chan.sendall(data)
+                        if chan in r:
+                            data = chan.recv(16384)
+                            if not data:
+                                break
+                            self.request.sendall(data)
+                finally:
+                    try:
+                        chan.close()
+                    except Exception:
+                        pass
+                    try:
+                        self.request.close()
+                    except Exception:
+                        pass
+
+        # select is only used inside handler; import lazily to keep module load minimal.
+        import select  # noqa: PLC0415
+
+        class _ForwardServer(socketserver.ThreadingTCPServer):
+            allow_reuse_address = True
 
         try:
-            proc = self._run_local_stream(cmd)
+            server = _ForwardServer(("127.0.0.1", int(local_port)), _ForwardHandler)
         except OSError as e:
-            self._emit_state(OrchestratorState.ERROR_TUNNEL_START, f"Failed to start tunnel: {e}")
-            return False
-
-        time.sleep(self.config.tunnel_start_grace_s)
-        if proc.poll() is not None:
             try:
-                out, err = proc.communicate(timeout=1.0)
+                client.close()
             except Exception:
-                out, err = "", ""
-            msg = "SSH tunnel exited immediately."
-            if out.strip():
-                msg += f"\n\n--- ssh stdout ---\n{out.strip()}"
-            if err.strip():
-                msg += f"\n\n--- ssh stderr ---\n{err.strip()}"
-            self._emit_state(OrchestratorState.ERROR_TUNNEL_START, msg.strip())
+                pass
+            self._emit_state(OrchestratorState.ERROR_TUNNEL_START, f"Failed to bind localhost:{local_port} for tunnel: {e}")
             return False
 
-        self.tunnel_process = proc
+        def _serve() -> None:
+            try:
+                server.serve_forever(poll_interval=0.2)
+            finally:
+                try:
+                    server.server_close()
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_serve, daemon=True)
+        t.start()
+
+        # Keep references so we can stop later.
+        self._tunnel_server = server
+        self._tunnel_thread = t
+        self._tunnel_transport = transport
+
+        # Don't keep the SSHClient object; transport remains open.
+        try:
+            client.close()
+        except Exception:
+            pass
+
+        # Grace period: confirm thread is alive.
+        time.sleep(self.config.tunnel_start_grace_s)
+        if not t.is_alive():
+            self.stop_tunnel()
+            self._emit_state(OrchestratorState.ERROR_TUNNEL_START, "Tunnel thread exited immediately.")
+            return False
+
         return True
 
     # -------- health checking --------
@@ -496,17 +658,9 @@ class Orchestrator:
             self._emit_state(OrchestratorState.READY, "Policy server and tunnel are healthy (WebSocket handshake succeeded).")
             return True
 
-        if kind == "tunnel" and self.tunnel_process is not None and self.tunnel_process.poll() is not None:
-            try:
-                out, err = self.tunnel_process.communicate(timeout=1.0)
-            except Exception:
-                out, err = "", ""
-            extra = ""
-            if out.strip():
-                extra += f"\n\n--- ssh stdout ---\n{out.strip()}"
-            if err.strip():
-                extra += f"\n\n--- ssh stderr ---\n{err.strip()}"
-            msg = msg + extra
+        # With Paramiko forwarding there is no subprocess output to attach; we just surface the error.
+        if kind == "tunnel" and not self._tunnel_running():
+            msg = "Tunnel appears down (forwarder not running): " + msg
 
         if kind == "tunnel":
             self._emit_state(OrchestratorState.ERROR_TUNNEL_BROKEN, f"Tunnel or listener appears down: {msg}")
