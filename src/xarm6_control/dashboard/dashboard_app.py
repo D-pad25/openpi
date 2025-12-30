@@ -24,6 +24,7 @@ from __future__ import annotations
 import os
 import signal
 import sys
+import shutil
 import threading
 import time
 from typing import Optional, Dict, Any, List
@@ -105,6 +106,12 @@ _active_mode: Optional[ServerMode] = None
 # Cancel coordination for HPC (if job_id not known yet)
 _hpc_cancel_lock = threading.Lock()
 _hpc_cancel_requested: bool = False
+
+# In-memory HPC credential session (never persisted; never logged)
+_hpc_session_lock = threading.Lock()
+_hpc_host: str = "aqua.qut.edu.au"
+_hpc_username: Optional[str] = None
+_hpc_password: Optional[str] = None
 
 # Camera server process
 _camera_server_lock = threading.Lock()
@@ -346,6 +353,19 @@ def _start_orchestrator_thread() -> bool:
             return False
 
         config = OrchestratorConfig()
+
+        # Prefer dashboard-provided credentials; fallback to legacy SSH alias behavior if unset.
+        with _hpc_session_lock:
+            host = _hpc_host
+            username = _hpc_username
+            password = _hpc_password
+
+        if username and password:
+            config.host = host
+            config.username = username
+            config.password = password
+            config.repo_dir = f"/home/{username}/openpi"
+
         orch = Orchestrator(config=config)
         orch.on_state_change = _on_state_change
         _orchestrator = orch
@@ -553,6 +573,53 @@ class RunServerRequest(BaseModel):
 class SetModeRequest(BaseModel):
     mode: ServerMode
 
+class HpcConnectRequest(BaseModel):
+    host: Optional[str] = None
+    username: str
+    password: str
+
+
+def _ssh_check_credentials(host: str, username: str, password: str, timeout_s: float = 10.0) -> None:
+    """
+    Validate SSH credentials without ever logging the password.
+    Uses SSH_ASKPASS to support password auth non-interactively.
+    """
+    askpass = HERE / "ssh_askpass.sh"
+    try:
+        if askpass.exists():
+            os.chmod(askpass, 0o700)
+    except Exception:
+        pass
+
+    env = os.environ.copy()
+    env["OPENPI_HPC_PASSWORD"] = password
+    env["SSH_ASKPASS"] = str(askpass)
+    env["SSH_ASKPASS_REQUIRE"] = "force"
+    env.setdefault("DISPLAY", ":0")
+
+    cmd = [
+        "ssh",
+        "-o", "BatchMode=no",
+        "-o", "NumberOfPasswordPrompts=1",
+        "-o", "StrictHostKeyChecking=accept-new",
+        f"{username}@{host}",
+        "bash -lc " + subprocess.list2cmdline(["echo connected"]),
+    ]
+    setsid = shutil.which("setsid")
+    if setsid:
+        cmd = [setsid, "-w"] + cmd
+
+    # stdin=DEVNULL ensures ssh has no tty, so SSH_ASKPASS is used.
+    subprocess.run(
+        cmd,
+        check=True,
+        text=True,
+        capture_output=True,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        timeout=timeout_s,
+    )
+
 
 # ============================================================
 # Routes
@@ -649,6 +716,10 @@ def api_run_server(req: RunServerRequest) -> Dict[str, Any]:
     _set_preferred_mode(req.mode)
 
     if req.mode == ServerMode.HPC:
+        with _hpc_session_lock:
+            if not (_hpc_username and _hpc_password):
+                raise HTTPException(status_code=400, detail="HPC credentials not set. Please connect first.")
+
         _set_active_mode(ServerMode.HPC)
         _set_hpc_cancel_requested(False)
         _set_status(OrchestratorState.SUBMITTING_JOB.value, "Submitting policy server job...", server_mode=ServerMode.HPC)
@@ -884,6 +955,65 @@ def api_xarm_status() -> Dict[str, Any]:
         log = "\n".join(_xarm_log_lines)
 
     return {"running": running, "returncode": rc, "log": log}
+
+
+# ============================================================
+# HPC credential session API (new; does NOT replace existing endpoints)
+# ============================================================
+
+@app.get("/api/hpc/session", response_class=JSONResponse)
+def api_hpc_session() -> Dict[str, Any]:
+    with _hpc_session_lock:
+        return {
+            "connected": bool(_hpc_username and _hpc_password),
+            "host": _hpc_host,
+            "username": _hpc_username,
+        }
+
+
+@app.post("/api/hpc/connect", response_class=JSONResponse)
+def api_hpc_connect(req: HpcConnectRequest) -> Dict[str, Any]:
+    if _any_server_running_or_busy():
+        raise HTTPException(status_code=409, detail="Cannot change HPC credentials while server is running/starting. Stop it first.")
+
+    host = (req.host or "").strip() or "aqua.qut.edu.au"
+    username = (req.username or "").strip()
+    password = req.password or ""
+
+    if not username:
+        raise HTTPException(status_code=400, detail="username is required")
+    if not password:
+        raise HTTPException(status_code=400, detail="password is required")
+
+    try:
+        _ssh_check_credentials(host, username, password, timeout_s=10.0)
+    except subprocess.CalledProcessError:
+        raise HTTPException(status_code=401, detail="Authentication failed. Check username/password/host.")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=400, detail="Timed out connecting to HPC.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to connect to HPC: {type(e).__name__}: {e}")
+
+    global _hpc_host, _hpc_username, _hpc_password
+    with _hpc_session_lock:
+        _hpc_host = host
+        _hpc_username = username
+        _hpc_password = password
+
+    return {"status": "connected", "host": host, "username": username}
+
+
+@app.post("/api/hpc/clear", response_class=JSONResponse)
+def api_hpc_clear() -> Dict[str, Any]:
+    if _any_server_running_or_busy():
+        raise HTTPException(status_code=409, detail="Cannot clear HPC credentials while server is running/starting. Stop it first.")
+
+    global _hpc_username, _hpc_password
+    with _hpc_session_lock:
+        _hpc_username = None
+        _hpc_password = None
+
+    return {"status": "cleared"}
 
 
 # ============================================================

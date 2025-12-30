@@ -187,6 +187,30 @@
       white-space:pre-wrap;
       z-index:999;
     }
+    .modalBackdrop{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:1000;
+    }
+    .modal{
+      width:min(520px, calc(100vw - 28px));
+      background:rgba(15,23,42,.95);
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:14px;
+      box-shadow:0 16px 40px rgba(0,0,0,.45);
+    }
+    .modal h3{
+      margin:0 0 8px 0;
+      font-size:13px;
+      font-weight:800;
+      color:#dbeafe;
+    }
+    .modal .row{justify-content:flex-end;}
   </style>
 </head>
 <body>
@@ -243,6 +267,12 @@
     </div>
 
     <div class="row" style="margin-top:10px;">
+      <span class="badge" id="hpcSessBadge">hpc: —</span>
+      <button id="btnHpcConnect">Connect HPC</button>
+      <button class="btnDanger" id="btnHpcClear">Clear Credentials</button>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
       <button class="btnOk" id="btnRunServer">Run Server</button>
       <button class="btnDanger" id="btnStopServer">Shutdown Server</button>
       <button id="btnCopyDetails">Copy Details</button>
@@ -290,6 +320,29 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="modalBackdrop" id="hpcModalBackdrop">
+  <div class="modal">
+    <h3>Connect to HPC</h3>
+    <div class="sub" style="margin:0 0 10px 0;">Credentials are kept in memory only for this dashboard session.</div>
+
+    <label class="badge">Host</label>
+    <input class="input" id="hpcHost" placeholder="e.g. aqua.qut.edu.au" />
+
+    <div style="height:10px;"></div>
+    <label class="badge">Username</label>
+    <input class="input" id="hpcUser" placeholder="e.g. n1234567" />
+
+    <div style="height:10px;"></div>
+    <label class="badge">Password</label>
+    <input class="input" id="hpcPass" type="password" placeholder="Password" />
+
+    <div class="row" style="margin-top:12px;">
+      <button id="btnHpcModalCancel">Cancel</button>
+      <button class="btnOk" id="btnHpcModalConnect">Connect</button>
+    </div>
+  </div>
+</div>
+
 <script>
   const els = {
     pillMode: document.getElementById('pillMode'),
@@ -308,6 +361,17 @@
     btnRunServer: document.getElementById('btnRunServer'),
     btnStopServer: document.getElementById('btnStopServer'),
     btnCopyDetails: document.getElementById('btnCopyDetails'),
+
+    hpcSessBadge: document.getElementById('hpcSessBadge'),
+    btnHpcConnect: document.getElementById('btnHpcConnect'),
+    btnHpcClear: document.getElementById('btnHpcClear'),
+
+    hpcModalBackdrop: document.getElementById('hpcModalBackdrop'),
+    hpcHost: document.getElementById('hpcHost'),
+    hpcUser: document.getElementById('hpcUser'),
+    hpcPass: document.getElementById('hpcPass'),
+    btnHpcModalCancel: document.getElementById('btnHpcModalCancel'),
+    btnHpcModalConnect: document.getElementById('btnHpcModalConnect'),
 
     btnStartCameras: document.getElementById('btnStartCameras'),
     camBadge: document.getElementById('camBadge'),
@@ -351,6 +415,41 @@
   function setModeRadio(value){
     els.modeLocal.checked = (value === "local");
     els.modeHpc.checked = (value === "hpc");
+  }
+
+  function openHpcModal(defaults){
+    if(defaults){
+      if(typeof defaults.host === "string") els.hpcHost.value = defaults.host;
+      if(typeof defaults.username === "string") els.hpcUser.value = defaults.username;
+    }
+    els.hpcPass.value = "";
+    els.hpcModalBackdrop.style.display = "flex";
+    setTimeout(()=>{ els.hpcPass.focus(); }, 20);
+  }
+  function closeHpcModal(){
+    els.hpcModalBackdrop.style.display = "none";
+  }
+
+  async function getHpcSession(){
+    return await fetchJSON("/api/hpc/session");
+  }
+
+  async function pollHpcSession(){
+    const s = await getHpcSession();
+    if(s.connected){
+      els.hpcSessBadge.textContent = "hpc: connected (" + s.username + "@" + (s.host || "host") + ")";
+      els.hpcSessBadge.className = "badge ok";
+    } else {
+      els.hpcSessBadge.textContent = "hpc: not connected";
+      els.hpcSessBadge.className = "badge warn";
+    }
+  }
+
+  async function ensureHpcConnected(){
+    const s = await getHpcSession();
+    if(s.connected) return true;
+    openHpcModal({host: s.host || "aqua.qut.edu.au", username: s.username || ""});
+    return false;
   }
 
   async function pollStatus(){
@@ -440,6 +539,13 @@
   els.btnRunServer.addEventListener("click", async ()=>{
     try{
       const mode = selectedMode();
+      if(mode === "hpc"){
+        const ok = await ensureHpcConnected();
+        if(!ok){
+          toast("Enter HPC credentials to continue.");
+          return;
+        }
+      }
       await fetchJSON("/api/run-server", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
@@ -495,6 +601,12 @@
   els.modeHpc.addEventListener("change", async ()=>{
     if(!els.modeHpc.checked) return;
     try{
+      const s = await getHpcSession();
+      if(!s.connected){
+        openHpcModal({host: s.host || "aqua.qut.edu.au", username: s.username || ""});
+        toast("Connect to HPC to enable HPC mode.");
+        return;
+      }
       await fetchJSON("/api/set-mode", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
@@ -503,6 +615,66 @@
       toast("Preferred mode set to HPC.");
     }catch(e){
       toast("Set mode failed: " + e.message);
+    }
+  });
+
+  els.btnHpcConnect.addEventListener("click", async ()=>{
+    try{
+      const s = await getHpcSession();
+      openHpcModal({host: s.host || "aqua.qut.edu.au", username: s.username || ""});
+    }catch(e){
+      toast("Unable to open connect dialog: " + e.message);
+    }
+  });
+
+  els.btnHpcClear.addEventListener("click", async ()=>{
+    try{
+      await fetchJSON("/api/hpc/clear", { method:"POST" });
+      toast("HPC credentials cleared.");
+      setModeRadio("local");
+      try{
+        await fetchJSON("/api/set-mode", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({mode:"local"})
+        });
+      }catch(e){}
+    }catch(e){
+      toast("Clear failed: " + e.message);
+    }
+  });
+
+  els.btnHpcModalCancel.addEventListener("click", async ()=>{
+    closeHpcModal();
+    setModeRadio("local");
+    try{
+      await fetchJSON("/api/set-mode", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({mode:"local"})
+      });
+    }catch(e){}
+  });
+
+  els.btnHpcModalConnect.addEventListener("click", async ()=>{
+    try{
+      const host = (els.hpcHost.value || "").trim();
+      const username = (els.hpcUser.value || "").trim();
+      const password = els.hpcPass.value || "";
+      await fetchJSON("/api/hpc/connect", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({host, username, password})
+      });
+      closeHpcModal();
+      toast("Connected to HPC.");
+      await fetchJSON("/api/set-mode", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({mode:"hpc"})
+      });
+    }catch(e){
+      toast("Connect failed: " + e.message);
     }
   });
 
@@ -541,6 +713,7 @@
     try { await pollCameras(); } catch(e){ }
     try { await pollLogs(); } catch(e){ }
     try { await pollXarm(); } catch(e){ }
+    try { await pollHpcSession(); } catch(e){ }
   }
 
   loop();
