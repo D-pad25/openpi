@@ -68,14 +68,14 @@ class OrchestratorConfig:
     endpoint_file: str = "$HOME/.openpi_policy_endpoint"
 
     # How long to wait for the endpoint file to appear
-    wait_endpoint_timeout_s: int = 500
+    wait_endpoint_timeout_s: int = 1000
     wait_endpoint_poll_s: int = 5
 
     # Single WebSocket connect timeout (per attempt)
     ws_health_timeout_s: int = 3
 
     # Overall time to wait for the server to become healthy (with retries)
-    server_health_timeout_s: int = 500
+    server_health_timeout_s: int = 1000
     server_health_poll_s: float = 5.0
 
     # After starting ssh, wait briefly and detect immediate failures
