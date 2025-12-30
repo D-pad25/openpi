@@ -36,6 +36,7 @@ class EnvMode(enum.Enum):
     AGRIVLA_CHILLIS_ONLY = "pi0_lora_xarm6_agrivla_chillis_only"
 
     DEMO = "demo"
+    DEMO_SERVER = "demo_server"
 
 
 @dataclasses.dataclass
@@ -154,7 +155,11 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
 
     EnvMode.DEMO: Checkpoint(
         config="pi0_lora_xarm6_agrivla_pi0_all",
-        dir="/mnt/d/Thesis/pi0/checkpoints/29999/pi0_lora_xarm6_agrivla_pi0_all/29999",
+        dir="/media/acrv/DanielsSSD/Thesis/pi0/checkpoints/29999/pi0_lora_xarm6_agrivla_pi0_all/29999",
+    ),
+    EnvMode.DEMO_SERVER: Checkpoint(
+        config="pi0_lora_xarm6_agrivla_pi0_all",
+        dir="checkpoints/AgriVLA/29999",
     ),
 }
 

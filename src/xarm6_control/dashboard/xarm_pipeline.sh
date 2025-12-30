@@ -133,7 +133,7 @@ case "$cmd" in
   ################################################
   serve-policy)
     echo ">>> Submitting policy server as GPU job on HPC (port ${POLICY_PORT})..."
-    run_hpc_cmd "export OPENPI_DATA_HOME=\$HOME/.cache/openpi; uv run scripts/serve_policy.py --env XARM --port ${POLICY_PORT}"
+    run_hpc_cmd "export OPENPI_DATA_HOME=\$HOME/.cache/openpi; uv run scripts/serve_policy.py --env DEMO_SERVER --port ${POLICY_PORT}"
     echo ">>> Policy server job submitted. Once it's running, you can start the tunnel."
     ;;
 
