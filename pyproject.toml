@@ -61,10 +61,6 @@ dev = [
 openpi-client = { workspace = true }
 lerobot = { git = "https://github.com/huggingface/lerobot", rev = "6674e368249472c91382eb54bb8501c94c7f0c56" }
 
-[tool.uv]
-# This repo is used on Linux/WSL only. Restrict locking/resolution to Linux so uv never
-# attempts to solve macOS/Windows splits (which can fail due to platform-specific wheels).
-environments = ["sys_platform == 'linux'"]
 
 [tool.uv.workspace]
 members = ["packages/*"]
