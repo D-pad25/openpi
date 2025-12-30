@@ -159,7 +159,7 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     ),
     EnvMode.DEMO_SERVER: Checkpoint(
         config="pi0_lora_xarm6_agrivla_pi0_all",
-        dir="checkpoints/AgriVLA/29999",
+        dir="src/openpi/checkpoints/AgriVLA/29999",
     ),
 }
 
