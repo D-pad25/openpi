@@ -209,15 +209,28 @@ def mjpeg_stream_generator(
     backend: ZmqCameraBackend,
     boundary: bytes = b"--frame",
     fallback_size: Tuple[int, int] = (640, 480),
+    target_fps: Optional[float] = None,
 ) -> Generator[bytes, None, None]:
     backend.start()  # idempotent
 
-    while True:
-        frame_bytes = backend.get_latest_jpeg(fallback_size=fallback_size)
-        yield (
-            boundary
-            + b"\r\n"
-            + b"Content-Type: image/jpeg\r\n\r\n"
-            + frame_bytes
-            + b"\r\n"
-        )
+    # Avoid busy-looping: pace output roughly to the backend's intended FPS.
+    fps = backend.target_fps if target_fps is None else target_fps
+    period = (1.0 / fps) if fps and fps > 0 else 0.0
+
+    try:
+        while True:
+            t0 = time.time()
+            frame_bytes = backend.get_latest_jpeg(fallback_size=fallback_size)
+            yield (
+                boundary
+                + b"\r\n"
+                + b"Content-Type: image/jpeg\r\n\r\n"
+                + frame_bytes
+                + b"\r\n"
+            )
+            if period > 0:
+                dt = time.time() - t0
+                if dt < period:
+                    time.sleep(period - dt)
+    except GeneratorExit:
+        return
