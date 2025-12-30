@@ -35,6 +35,8 @@ class EnvMode(enum.Enum):
     AGRIVLA_TOMATOES_PLUS_200 = "pi0_lora_xarm6_agrivla_tomatoes_plus_200"
     AGRIVLA_CHILLIS_ONLY = "pi0_lora_xarm6_agrivla_chillis_only"
 
+    DEMO = "demo"
+    DEMO_SERVER = "demo_server"
 
 @dataclasses.dataclass
 class Checkpoint:
@@ -148,6 +150,15 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     EnvMode.AGRIVLA_CHILLIS_ONLY: Checkpoint(
         config="pi0_lora_xarm6_agrivla_pi0_chillis_only",
         dir="checkpoints/pi0_lora_xarm6_agrivla_pi0_chillis_only/pi0_lora_xarm6_agrivla_pi0_chillis_only_20251012_1322/29999",
+    ),
+
+    EnvMode.DEMO: Checkpoint(
+        config="pi0_lora_xarm6_agrivla_pi0_all",
+        dir="/media/acrv/DanielsSSD/Thesis/pi0/checkpoints/29999/pi0_lora_xarm6_agrivla_pi0_all/29999",
+    ),
+    EnvMode.DEMO_SERVER: Checkpoint(
+        config="pi0_lora_xarm6_agrivla_pi0_all",
+        dir="checkpoints/AgriVLA/29999",
     ),
 }
 
