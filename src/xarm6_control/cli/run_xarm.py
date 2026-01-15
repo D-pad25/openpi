@@ -1,5 +1,25 @@
 # main.py
 
+import sys
+from pathlib import Path
+
+# Ensure we use the correct xarm6_control package from src/
+# This handles cases where there might be a duplicate package elsewhere
+script_file = Path(__file__).resolve()
+src_dir = script_file.parent.parent.parent  # Go up: cli/ -> xarm6_control/ -> src/
+
+# Remove any existing xarm6_control from sys.modules to force re-import from correct location
+if 'xarm6_control' in sys.modules:
+    # Remove the package and all its submodules
+    to_remove = [name for name in sys.modules.keys() if name.startswith('xarm6_control')]
+    for name in to_remove:
+        del sys.modules[name]
+
+# Ensure src/ is first in sys.path (but don't add duplicates)
+if str(src_dir) in sys.path:
+    sys.path.remove(str(src_dir))
+sys.path.insert(0, str(src_dir))
+
 import time
 import tyro
 import copy
