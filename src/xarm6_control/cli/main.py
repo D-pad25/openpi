@@ -1,5 +1,5 @@
 # main.py
-
+import sys
 import time
 import tyro
 import copy
@@ -12,7 +12,6 @@ import datetime
 import os
 import csv
 
-import sys
 print("sys.path contains:")
 for p in sys.path:
     print(f"  - {p}")
@@ -23,7 +22,6 @@ for p in sys.path:
     check_path = os.path.join(p, "xarm6_control")
     exists = os.path.exists(check_path)
     print(f"  {check_path}: {'✅ FOUND' if exists else '❌ NOT FOUND'}")
-    
 class MockCamera:
     def read(self, img_size=None):
         # Return fake RGB and depth images
