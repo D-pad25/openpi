@@ -1,5 +1,16 @@
 # main.py
 import sys
+print("sys.path contains:")
+for p in sys.path:
+    print(f"  - {p}")
+
+print("\nLooking for xarm6_control in these directories...")
+import os
+for p in sys.path:
+    check_path = os.path.join(p, "xarm6_control")
+    exists = os.path.exists(check_path)
+    print(f"  {check_path}: {'✅ FOUND' if exists else '❌ NOT FOUND'}")
+    
 import time
 import tyro
 import copy
@@ -12,16 +23,6 @@ import datetime
 import os
 import csv
 
-print("sys.path contains:")
-for p in sys.path:
-    print(f"  - {p}")
-
-print("\nLooking for xarm6_control in these directories...")
-import os
-for p in sys.path:
-    check_path = os.path.join(p, "xarm6_control")
-    exists = os.path.exists(check_path)
-    print(f"  {check_path}: {'✅ FOUND' if exists else '❌ NOT FOUND'}")
 class MockCamera:
     def read(self, img_size=None):
         # Return fake RGB and depth images
