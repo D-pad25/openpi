@@ -29,7 +29,7 @@ import queue
 import numpy as np
 from collections import deque
 from openpi_client import websocket_client_policy, image_tools
-from xarm6_control.env.xarm_env import XArmRealEnv, MockXArmEnv
+from xarm6_control.robot_env.xarm_env import XArmRealEnv, MockXArmEnv
 from xarm6_control.comms.zmq.camera_node import ZMQClientCamera
 import datetime
 import os

@@ -27,17 +27,35 @@ print(f"[DEBUG] Script location: {script_file}")
 print(f"[DEBUG] src_dir: {src_dir}")
 print(f"[DEBUG] Expected xarm6_control at: {src_dir / 'xarm6_control'}")
 print(f"[DEBUG] Does it exist? {(src_dir / 'xarm6_control').exists()}")
-print(f"[DEBUG] Does env/ exist? {(src_dir / 'xarm6_control' / 'env').exists()}")
+print(f"[DEBUG] Does robot_env/ exist? {(src_dir / 'xarm6_control' / 'robot_env').exists()}")
 print(f"[DEBUG] sys.path[0] = {sys.path[0]}")
 
 # Verify the correct package location exists
 correct_xarm6_path = src_dir / 'xarm6_control'
-correct_env_path = correct_xarm6_path / 'env'
+correct_env_path = correct_xarm6_path / 'robot_env'
 
 if not correct_xarm6_path.exists():
     raise RuntimeError(f"Expected xarm6_control at {correct_xarm6_path} but it doesn't exist!")
+
+# Check what directories actually exist in xarm6_control
+if correct_xarm6_path.exists():
+    existing_dirs = [d.name for d in correct_xarm6_path.iterdir() if d.is_dir()]
+    expected_dirs = ['env', 'cli', 'comms', 'hardware', 'sensors', 'dashboard', 'analysis', 'tests', 'scripts']
+    expected_dirs = ['robot_env', 'cli', 'comms', 'hardware', 'sensors', 'dashboard', 'analysis', 'tests', 'scripts']
+    missing_dirs = [d for d in expected_dirs if d not in existing_dirs]
+    if missing_dirs:
+        print(f"\n⚠️  WARNING: Missing directories in xarm6_control: {missing_dirs}")
+        print(f"   Existing directories: {existing_dirs}")
+        print(f"   This suggests a file sync issue between Windows/Linux.")
+        print(f"   Please ensure all directories are synced to Linux.\n")
+
 if not correct_env_path.exists():
-    raise RuntimeError(f"Expected env/ at {correct_env_path} but it doesn't exist!")
+    raise RuntimeError(
+        f"Expected robot_env/ at {correct_env_path} but it doesn't exist!\n"
+        f"This is likely a file sync issue. Check if the robot_env/ directory exists on Linux.\n"
+        f"Try: ls -la {correct_env_path.parent}/"
+        f"\nNote: Directory was renamed from 'env' to 'robot_env' to avoid .gitignore conflict."
+    )
 
 # Force import from correct location by manipulating the package path
 import importlib.util
@@ -66,7 +84,7 @@ import tyro
 import copy
 import numpy as np
 from openpi_client import websocket_client_policy, image_tools
-from xarm6_control.env.xarm_env import XArmRealEnv, MockXArmEnv
+from xarm6_control.robot_env.xarm_env import XArmRealEnv, MockXArmEnv
 from xarm6_control.comms.zmq.camera_node import ZMQClientCamera
 from xarm6_control.sensors.transforms.resize_pkl import resize_with_pad_custom
 import datetime
