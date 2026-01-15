@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+import os
 
 # Ensure we use the correct xarm6_control package from src/
 # This handles cases where there might be a duplicate package elsewhere
@@ -19,6 +20,46 @@ if 'xarm6_control' in sys.modules:
 if str(src_dir) in sys.path:
     sys.path.remove(str(src_dir))
 sys.path.insert(0, str(src_dir))
+
+# Diagnostic: Check which xarm6_control we're about to import
+print(f"[DEBUG] Looking for xarm6_control...")
+print(f"[DEBUG] Script location: {script_file}")
+print(f"[DEBUG] src_dir: {src_dir}")
+print(f"[DEBUG] Expected xarm6_control at: {src_dir / 'xarm6_control'}")
+print(f"[DEBUG] Does it exist? {(src_dir / 'xarm6_control').exists()}")
+print(f"[DEBUG] Does env/ exist? {(src_dir / 'xarm6_control' / 'env').exists()}")
+print(f"[DEBUG] sys.path[0] = {sys.path[0]}")
+
+# Verify the correct package location exists
+correct_xarm6_path = src_dir / 'xarm6_control'
+correct_env_path = correct_xarm6_path / 'env'
+
+if not correct_xarm6_path.exists():
+    raise RuntimeError(f"Expected xarm6_control at {correct_xarm6_path} but it doesn't exist!")
+if not correct_env_path.exists():
+    raise RuntimeError(f"Expected env/ at {correct_env_path} but it doesn't exist!")
+
+# Force import from correct location by manipulating the package path
+import importlib.util
+import types
+
+# Load xarm6_control from the correct location
+xarm6_spec = importlib.util.spec_from_file_location(
+    "xarm6_control",
+    correct_xarm6_path / "__init__.py"
+)
+if xarm6_spec is None or xarm6_spec.loader is None:
+    raise RuntimeError(f"Could not create spec for xarm6_control at {correct_xarm6_path}")
+
+# Create the module
+xarm6_control = importlib.util.module_from_spec(xarm6_spec)
+xarm6_control.__path__ = [str(correct_xarm6_path)]
+
+# Add to sys.modules BEFORE importing so Python uses this one
+sys.modules['xarm6_control'] = xarm6_control
+
+# Execute the __init__.py to initialize the package
+xarm6_spec.loader.exec_module(xarm6_control)
 
 import time
 import tyro
