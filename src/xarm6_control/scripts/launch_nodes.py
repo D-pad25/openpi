@@ -3,7 +3,7 @@ from pathlib import Path
 
 import tyro
 
-from zmq_core.robot_node import ZMQServerRobot
+from xarm6_control.comms.zmq.robot_node import ZMQServerRobot
 
 
 @dataclass

@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 import numpy as np
 import zmq
 
-from xarm6_control.cameras.camera import CameraDriver
+from xarm6_control.sensors.cameras.camera import CameraDriver
 
 DEFAULT_CAMERA_PORT = 5000
 

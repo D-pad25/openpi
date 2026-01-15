@@ -26,13 +26,13 @@ import time
 
 # -------- import client (GripperClientAsync) --------
 try:
-    client_mod = importlib.import_module("gripper_client_async_v2")
+    client_mod = importlib.import_module("xarm6_control.hardware.gripper.client_async")
     GripperClientAsync = getattr(client_mod, "GripperClientAsync")
 except Exception as e:
     sys.stderr.write(
-        "❌ Could not import GripperClientAsync from gripper_client_async_v2.py\n"
+        "❌ Could not import GripperClientAsync from xarm6_control.hardware.gripper.client_async\n"
         f"Error: {e}\n"
-        "Make sure gripper_client_async_v2.py is in the same directory or on PYTHONPATH.\n"
+        "Make sure the xarm6_control package is on PYTHONPATH.\n"
     )
     sys.exit(1)
 

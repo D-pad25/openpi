@@ -6,7 +6,7 @@ with 2 second delays between each command.
 """
 
 import asyncio
-from gripper_client_async_v2 import GripperClientAsync
+from xarm6_control.hardware.gripper.client_async import GripperClientAsync
 
 def to_norm(val: int) -> float:
     """Convert 0–255 int to normalized float in [0,1]."""

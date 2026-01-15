@@ -228,21 +228,21 @@ case "$cmd" in
     echo ">>> Launching camera nodes (local machine)..."
     cd "${LOCAL_REPO_DIR}"
     source "${VENV_DIR}/bin/activate"
-    uv run src/xarm6_control/zmq_core/launch_camera_nodes.py
+    uv run src/xarm6_control/comms/zmq/launch_camera_nodes.py
     ;;
 
   gripper)
     echo ">>> Running gripper server (local, outside venv recommended)..."
     cd "${LOCAL_REPO_DIR}"
     # Intentionally NOT activating venv here, per your note
-    python src/xarm6_control/gripper_server_async_v2.py
+    python src/xarm6_control/hardware/gripper/server_async.py
     ;;
 
   client-default)
     echo ">>> Running xArm client (default prompt)..."
     cd "${LOCAL_REPO_DIR}"
     source "${VENV_DIR}/bin/activate"
-    uv run src/xarm6_control/main.py \
+    uv run src/xarm6_control/cli/main.py \
       --remote_host localhost \
       --remote_port "${POLICY_PORT}"
     ;;
@@ -251,7 +251,7 @@ case "$cmd" in
     echo ">>> Running xArm client (tomato prompt)..."
     cd "${LOCAL_REPO_DIR}"
     source "${VENV_DIR}/bin/activate"
-    uv run src/xarm6_control/main.py \
+    uv run src/xarm6_control/cli/main.py \
       --remote_host localhost \
       --remote_port "${POLICY_PORT}" \
       --prompt "Pick a ripe, red tomato and drop it in the blue bucket. [crop=tomato]"
@@ -261,7 +261,7 @@ case "$cmd" in
     echo ">>> Running xArm client (chilli prompt)..."
     cd "${LOCAL_REPO_DIR}"
     source "${VENV_DIR}/bin/activate"
-    uv run src/xarm6_control/main.py \
+    uv run src/xarm6_control/cli/main.py \
       --remote_host localhost \
       --remote_port "${POLICY_PORT}" \
       --prompt "Pick a red chilli and drop it in the blue bucket. [crop=chilli]"

@@ -150,7 +150,7 @@ case "$cmd" in
     echo ">>> Running gripper server (local, outside venv recommended)..."
     cd "${LOCAL_REPO_DIR}"
     # Intentionally NOT activating venv here, per your note
-    python src/xarm6_control/gripper_server_async_v2.py
+    python src/xarm6_control/hardware/gripper/server_async.py
     ;;
 
   client-default)

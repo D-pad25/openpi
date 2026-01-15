@@ -9,7 +9,7 @@ from typing import Optional, Tuple, Generator, Dict, Any
 import cv2
 import numpy as np
 
-from xarm6_control.zmq_core.camera_node import ZMQClientCamera
+from xarm6_control.comms.zmq.camera_node import ZMQClientCamera
 
 
 class ZmqCameraBackend:

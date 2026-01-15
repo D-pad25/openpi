@@ -5,9 +5,9 @@ import tyro
 import copy
 import numpy as np
 from openpi_client import websocket_client_policy, image_tools
-from xarm_env import XArmRealEnv, MockXArmEnv
-from zmq_core.camera_node import ZMQClientCamera
-from resize_pkl import resize_with_pad_custom
+from xarm6_control.env.xarm_env import XArmRealEnv, MockXArmEnv
+from xarm6_control.comms.zmq.camera_node import ZMQClientCamera
+from xarm6_control.sensors.transforms.resize_pkl import resize_with_pad_custom
 import datetime
 import os
 import csv

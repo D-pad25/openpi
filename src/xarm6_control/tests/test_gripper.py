@@ -2,7 +2,7 @@
 
 import time
 import numpy as np
-from xarm_env import XArmRealEnv
+from xarm6_control.env.xarm_env import XArmRealEnv
 import rospy
 
 def test_gripper_only():
