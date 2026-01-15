@@ -242,7 +242,7 @@ case "$cmd" in
     echo ">>> Running xArm client (default prompt)..."
     cd "${LOCAL_REPO_DIR}"
     source "${VENV_DIR}/bin/activate"
-    uv run src/xarm6_control/main2.py \
+    uv run src/xarm6_control/main.py \
       --remote_host localhost \
       --remote_port "${POLICY_PORT}"
     ;;
@@ -251,7 +251,7 @@ case "$cmd" in
     echo ">>> Running xArm client (tomato prompt)..."
     cd "${LOCAL_REPO_DIR}"
     source "${VENV_DIR}/bin/activate"
-    uv run src/xarm6_control/main2.py \
+    uv run src/xarm6_control/main.py \
       --remote_host localhost \
       --remote_port "${POLICY_PORT}" \
       --prompt "Pick a ripe, red tomato and drop it in the blue bucket. [crop=tomato]"
@@ -261,7 +261,7 @@ case "$cmd" in
     echo ">>> Running xArm client (chilli prompt)..."
     cd "${LOCAL_REPO_DIR}"
     source "${VENV_DIR}/bin/activate"
-    uv run src/xarm6_control/main2.py \
+    uv run src/xarm6_control/main.py \
       --remote_host localhost \
       --remote_port "${POLICY_PORT}" \
       --prompt "Pick a red chilli and drop it in the blue bucket. [crop=chilli]"

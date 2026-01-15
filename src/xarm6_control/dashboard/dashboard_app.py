@@ -71,7 +71,7 @@ DEFAULT_XARM_PROMPT = "Pick a ripe, red tomato and drop it in the blue bucket. [
 XARM_PORT = 8000
 
 SERVE_POLICY_SCRIPT = OPENPI_ROOT / "scripts" / "serve_policy.py"
-XARM_CLIENT_SCRIPT = OPENPI_ROOT / "src" / "xarm6_control" / "main2.py"
+XARM_CLIENT_SCRIPT = OPENPI_ROOT / "src" / "xarm6_control" / "main.py"
 
 # ============================================================
 # Mode enum
@@ -886,7 +886,7 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
         # Match your known-good CLI shape, but make it robust with env/cwd.
         cmd = [
             "uv", "run",
-            "src/xarm6_control/main2.py",
+            "src/xarm6_control/main.py",
             "--remote_host", "localhost",
             "--remote_port", str(XARM_PORT),
             "--prompt", prompt,
