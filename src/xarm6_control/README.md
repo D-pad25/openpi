@@ -97,16 +97,10 @@ ssh -L 8000:10.13.22.1:8000 n10813934@aqua.qut.edu.au
 
 ### 3. Run the client (make relative path)
 
-#### 3.1 Set up enviroment
-
-> - This step activates the local Python environment and configures ROS Noetic support.  
-> - It ensures that ROS-related Python modules (e.g., `rospy`) are accessible, and that the workspace is correctly set up for ROS-integrated inference and control.
-> - Need to test if we are still actually using the ros python stuff
+#### 3.1 Activate virtual enviroment
 
 ```bash
 source .venv/bin/activate
-source /opt/ros/noetic/setup.bash
-export PYTHONPATH=$PYTHONPATH:/opt/ros/noetic/lib/python3/dist-packages
 ```
 
 #### 3.2 Launch camera nodes
@@ -114,18 +108,15 @@ export PYTHONPATH=$PYTHONPATH:/opt/ros/noetic/lib/python3/dist-packages
 ```bash
 uv run src/xarm6_control/comms/zmq/launch_camera_nodes.py
 ```
-> - **NOTE**: You need to be outside virtual enviroment to run this
 
 #### 3.3 Run the gripper server
+> - **NOTE**: You need to be outside virtual enviroment to run this
+
 ```bash
 python src/xarm6_control/hardware/gripper/server_async.py
 ```
 
-#### 3.4 (a) Run the client script (refferencing local dir and rospy)
-
-> - **NOTE**: This used to be `PYTHONPATH=.:/opt/ros/noetic/lib/python3/dist-packages uv run src/xarm6_control/cli/main.py --remote_host localhost --remote_port 8000`, however, I changed it to the below. This needs to be tested. 
-
-#### 3.4 (b) Run the client script without ROS (recommended)
+#### 3.4 Run the Client script with default prompt
 ##### To run with default propmt
 ```bash
 uv run src/xarm6_control/cli/main.py --remote_host localhost --remote_port 8000
