@@ -889,13 +889,13 @@ def _xarm_log_reader(proc: subprocess.Popen) -> None:
 @app.post("/api/run-xarm", response_class=JSONResponse)
 def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
     global _xarm_process
-
+    _append_xarm_log("[dashboard] Run XArm client pressed.")
     with _status_lock:
         state = _last_status["state"]
-
+    _append_xarm_log(f"[dashboard] State: {state}")
     if state != OrchestratorState.READY.value:
         raise HTTPException(status_code=400, detail=f"Policy server not READY (current state: {state}). Start it first.")
-
+    _append_xarm_log(f"[dashboard] State is READY")
     with _xarm_lock:
         if _xarm_process is not None and _xarm_process.poll() is None:
             raise HTTPException(status_code=409, detail="xArm client is already running.")
