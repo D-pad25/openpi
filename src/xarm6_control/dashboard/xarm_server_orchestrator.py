@@ -137,6 +137,7 @@ class Orchestrator:
     job_id: Optional[str] = None
     remote_ip: Optional[str] = None
     remote_port: Optional[int] = None
+    local_port: Optional[int] = None  # Actual local port used (may differ from config.policy_port if port was in use)
     tunnel_process: Optional[subprocess.Popen] = None
 
     # cancellation flag
@@ -293,6 +294,38 @@ class Orchestrator:
 
     # --------------- tunnel / job control ---------------
 
+    def _find_available_port(self, preferred_port: int, max_attempts: int = 10) -> int:
+        """
+        Find an available port, starting from preferred_port.
+        If preferred_port is available, use it. Otherwise, try consecutive ports.
+        
+        Args:
+            preferred_port: The preferred port to use
+            max_attempts: Maximum number of ports to try
+            
+        Returns:
+            An available port number
+        """
+        import socket
+        
+        for offset in range(max_attempts):
+            port = preferred_port + offset
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    s.bind(('127.0.0.1', port))
+                    # If bind succeeds, port is available
+                    return port
+            except OSError:
+                # Port is in use, try next one
+                continue
+        
+        # If we couldn't find any port, raise an error
+        raise RuntimeError(
+            f"Could not find an available port in range [{preferred_port}, {preferred_port + max_attempts - 1}]. "
+            f"Please free up a port or increase max_attempts."
+        )
+
     def _tunnel_running(self) -> bool:
         return self.tunnel_process is not None and self.tunnel_process.poll() is None
 
@@ -303,6 +336,7 @@ class Orchestrator:
             return
         if proc.poll() is not None:
             self.tunnel_process = None
+            self.local_port = None  # Reset local port when tunnel stops
             return
 
         try:
@@ -346,8 +380,11 @@ class Orchestrator:
                 debug.append("Tunnel: terminated.")
             else:
                 debug.append("Tunnel: not running.")
+            # Reset local port when stopping
+            self.local_port = None
         except Exception as e:
             debug.append(f"Tunnel stop failed: {e}")
+            self.local_port = None
 
         try:
             _, msg = self.delete_job()
@@ -569,8 +606,17 @@ echo "PORT=8000"       >> "$HOME/.openpi_policy_endpoint"
             )
             return False
 
-        local_port = self.config.policy_port
+        local_port = self._find_available_port(self.config.policy_port)
         remote_port = self.remote_port
+        
+        # Store the actual local port being used
+        self.local_port = local_port
+
+        if local_port != self.config.policy_port:
+            self._emit_state(
+                OrchestratorState.STARTING_TUNNEL,
+                f"Port {self.config.policy_port} is in use, using port {local_port} instead.",
+            )
 
         self._emit_state(
             OrchestratorState.STARTING_TUNNEL,
@@ -626,6 +672,10 @@ echo "PORT=8000"       >> "$HOME/.openpi_policy_endpoint"
 
     # -------- health checking --------
 
+    def _get_local_port(self) -> int:
+        """Get the actual local port being used (falls back to config if not set)."""
+        return self.local_port if self.local_port is not None else self.config.policy_port
+
     def _check_policy_health_once(self) -> Tuple[bool, str, str]:
         """
         Try a single WebSocket connect.
@@ -634,7 +684,7 @@ echo "PORT=8000"       >> "$HOME/.openpi_policy_endpoint"
             (ok, kind, message)
             kind in {"ok", "tunnel", "server"}
         """
-        uri = f"ws://localhost:{self.config.policy_port}"
+        uri = f"ws://localhost:{self._get_local_port()}"
         try:
             ws = websockets.sync.client.connect(
                 uri,
@@ -656,7 +706,7 @@ echo "PORT=8000"       >> "$HOME/.openpi_policy_endpoint"
 
         self._emit_state(
             OrchestratorState.CHECKING_POLICY_HEALTH,
-            f"Checking WebSocket health on ws://localhost:{self.config.policy_port}...",
+            f"Checking WebSocket health on ws://localhost:{self._get_local_port()}...",
         )
 
         ok, kind, msg = self._check_policy_health_once()
@@ -691,7 +741,7 @@ echo "PORT=8000"       >> "$HOME/.openpi_policy_endpoint"
 
         self._emit_state(
             OrchestratorState.CHECKING_POLICY_HEALTH,
-            f"Waiting up to {timeout}s for ws://localhost:{self.config.policy_port} to become healthy...",
+            f"Waiting up to {timeout}s for ws://localhost:{self._get_local_port()} to become healthy...",
         )
 
         start = time.time()
