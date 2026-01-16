@@ -142,6 +142,10 @@ def main(
     log_dir: str = "/media/acrv/DanielsSSD/final_test",
     # log_dir: str = os.path.expanduser("~/test_logs"),
     save: bool = False,  # New argument to control saving behavior
+    gripper_mode: str = "ros",  # "ros" for ROS/Teensy, "usb" for direct USB control
+    gripper_usb_port: str = "/dev/ttyUSB0",  # Serial port for USB mode (Linux) or "COM3" (Windows)
+    gripper_host: str = "127.0.0.1",  # Host for ROS mode TCP server
+    gripper_port: int = 22345,  # Port for ROS mode TCP server
 ):
     # Create a log directory if it doesn't exist
     if save:
@@ -165,7 +169,13 @@ def main(
             "base": ZMQClientCamera(port=base_camera_port, host=remote_host),
         }
         # print
-        env = XArmRealEnv(camera_dict=camera_clients)
+        env = XArmRealEnv(
+            camera_dict=camera_clients,
+            gripper_mode=gripper_mode,
+            gripper_usb_port=gripper_usb_port,
+            gripper_host=gripper_host,
+            gripper_port=gripper_port,
+        )
     print("Attempting to connect to server...")
     # Connect to the policy server
     policy_client = websocket_client_policy.WebsocketClientPolicy(

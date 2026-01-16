@@ -11,6 +11,7 @@ import socket
 import asyncio
 import json
 from xarm6_control.hardware.gripper.client_async import GripperClient
+from xarm6_control.hardware.gripper.dynamixel_usb import GripperUSBClient
 # from dummy_gripper import GripperClientAsync
 
 '''
@@ -88,13 +89,42 @@ class GripperClientAsync_old:
         return await self.send_gripper_command("GET")
     
 class XArmRealEnv:
-    def __init__(self, ip="192.168.1.203", camera_dict=None):
+    def __init__(
+        self,
+        ip="192.168.1.203",
+        camera_dict=None,
+        gripper_mode: str = "ros",  # "ros" or "usb"
+        gripper_usb_port: str = "/dev/ttyUSB0",  # For USB mode
+        gripper_host: str = "127.0.0.1",  # For ROS mode
+        gripper_port: int = 22345,  # For ROS mode
+    ):
+        """
+        Initialize xArm environment.
+        
+        Args:
+            ip: xArm robot IP address
+            camera_dict: Dictionary of camera clients
+            gripper_mode: "ros" for ROS/Teensy control, "usb" for direct USB control
+            gripper_usb_port: Serial port for USB mode (e.g., "/dev/ttyUSB0" or "COM3")
+            gripper_host: Host for ROS mode TCP server
+            gripper_port: Port for ROS mode TCP server
+        """
         self.arm = XArmAPI(ip, is_radian=True)
         print(f"Connecting to xArm at {ip}...")
         self._initialize_arm()
         print("xArm connected and initialized.")
-        print("Setting up gripper client...")
-        self.gripper = GripperClient()
+        print(f"Setting up gripper client (mode: {gripper_mode})...")
+        
+        # Initialize gripper based on mode
+        if gripper_mode.lower() == "usb":
+            self.gripper = GripperUSBClient(port=gripper_usb_port)
+            print(f"Gripper USB client initialized on {gripper_usb_port}")
+        elif gripper_mode.lower() == "ros":
+            self.gripper = GripperClient(host=gripper_host, port=gripper_port)
+            print(f"Gripper ROS client initialized (host={gripper_host}, port={gripper_port})")
+        else:
+            raise ValueError(f"Unknown gripper_mode: {gripper_mode}. Must be 'ros' or 'usb'")
+        
         print("Gripper client initialized.")
         self.camera_dict = camera_dict or {}
 

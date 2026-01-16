@@ -230,6 +230,10 @@ def main(
     # New tuning knobs:
     prefetch_margin: int = 5,          # prefetch next chunk when this many steps remain
     camera_read_size: Optional[Tuple[int, int]] = None,  # e.g., (640, 480); None uses camera default
+    gripper_mode: str = "ros",  # "ros" for ROS/Teensy, "usb" for direct USB control
+    gripper_usb_port: str = "/dev/ttyUSB0",  # Serial port for USB mode (Linux) or "COM3" (Windows)
+    gripper_host: str = "127.0.0.1",  # Host for ROS mode TCP server
+    gripper_port: int = 22345,  # Port for ROS mode TCP server
 ):
     # Prepare logging directory
     if save:
@@ -255,7 +259,16 @@ def main(
     }
 
     # Environments
-    env = MockXArmEnv(camera_dict=cameras) if mock else XArmRealEnv(camera_dict=cameras)
+    if mock:
+        env = MockXArmEnv(camera_dict=cameras)
+    else:
+        env = XArmRealEnv(
+            camera_dict=cameras,
+            gripper_mode=gripper_mode,
+            gripper_usb_port=gripper_usb_port,
+            gripper_host=gripper_host,
+            gripper_port=gripper_port,
+        )
 
     # Policy client
     print(f"[NET] Connecting to policy server at ws://{remote_host}:{remote_port} ...")
