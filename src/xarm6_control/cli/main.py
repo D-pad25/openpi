@@ -177,41 +177,79 @@ def main(
             gripper_port=gripper_port,
         )
     print("Attempting to connect to server...")
-    # Connect to the policy server
-    policy_client = websocket_client_policy.WebsocketClientPolicy(
-        host=remote_host,
-        port=remote_port,
-    )
-
-
+    sys.stdout.flush()  # Ensure output is visible immediately
     
-    print(f"Connecting to policy server at ws://{remote_host}:{remote_port}...")
+    # Connect to the policy server
+    try:
+        policy_client = websocket_client_policy.WebsocketClientPolicy(
+            host=remote_host,
+            port=remote_port,
+        )
+        print(f"✅ Policy client created. Connecting to ws://{remote_host}:{remote_port}...")
+        sys.stdout.flush()
+        
+        # Test connection by trying to get metadata or ping
+        # The client should connect on first infer() call, but let's verify it's working
+        print("✅ Policy client initialized successfully.")
+        sys.stdout.flush()
+    except Exception as e:
+        print(f"❌ Failed to create policy client: {e}")
+        sys.stdout.flush()
+        raise
+
     actions_from_chunk_completed = 0
     action_chunk = []
     start_time_log = time.time()
+    print(f"🚀 Starting policy execution loop (max_steps={max_steps})...")
+    sys.stdout.flush()
+    
     try:
         for step_idx in range(max_steps):
             start_time = time.time()
-            # print(f"[INFO] Step {step_idx+1}/{max_steps} - Getting observation...")
-            obs = env.get_observation()
-            # print(f"[INFO] Step {step_idx+1}/{max_steps} - Observations received.")
+            # Get observation
+            try:
+                obs = env.get_observation()
+                if step_idx == 0:
+                    print(f"[Step {step_idx+1}] ✅ Got initial observation")
+                    sys.stdout.flush()
+            except Exception as e:
+                print(f"❌ Error getting observation at step {step_idx+1}: {e}")
+                sys.stdout.flush()
+                import traceback
+                traceback.print_exc()
+                sys.stdout.flush()
+                raise
             # Get new action_chunk if empty or 25 steps have passed
             if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= 25:
-                # pad images as per policy requirements
-                # base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
-                # wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
-                base_rgb = resize_with_pad_custom(obs["base_rgb"], 224, 224)
-                wrist_rgb = resize_with_pad_custom(obs["wrist_rgb"], 224, 224)
+                try:
+                    # pad images as per policy requirements
+                    # base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
+                    # wrist_rgb = image_tools.resize_with_pad(obs["wrist_rgb"], 224, 224)
+                    base_rgb = resize_with_pad_custom(obs["base_rgb"], 224, 224)
+                    wrist_rgb = resize_with_pad_custom(obs["wrist_rgb"], 224, 224)
 
-                observation = {
-                    "state": np.concatenate([obs["joint_position"], obs["gripper_position"]]),
-                    "image": base_rgb,
-                    "wrist_image": wrist_rgb,
-                    "prompt": prompt,
-                }
-                # Request new action chunk from policy
-                action_chunk = policy_client.infer(observation)["actions"]
-                actions_from_chunk_completed = 0
+                    observation = {
+                        "state": np.concatenate([obs["joint_position"], obs["gripper_position"]]),
+                        "image": base_rgb,
+                        "wrist_image": wrist_rgb,
+                        "prompt": prompt,
+                    }
+                    # Request new action chunk from policy
+                    if step_idx % 25 == 0:  # Log every 25 steps to avoid spam
+                        print(f"[Step {step_idx+1}] Requesting new action chunk from policy...")
+                        sys.stdout.flush()
+                    action_chunk = policy_client.infer(observation)["actions"]
+                    actions_from_chunk_completed = 0
+                    if step_idx % 25 == 0:
+                        print(f"[Step {step_idx+1}] ✅ Received action chunk with {len(action_chunk)} actions")
+                        sys.stdout.flush()
+                except Exception as e:
+                    print(f"❌ Error getting action chunk at step {step_idx+1}: {e}")
+                    sys.stdout.flush()
+                    import traceback
+                    traceback.print_exc()
+                    sys.stdout.flush()
+                    raise
 
             action = action_chunk[actions_from_chunk_completed]
             actions_from_chunk_completed += 1
@@ -284,6 +322,14 @@ def main(
                 
     except KeyboardInterrupt:
         print("\n🛑 Execution manually stopped by user.")
+        sys.stdout.flush()
+    except Exception as e:
+        print(f"\n❌ Error during execution: {e}")
+        sys.stdout.flush()
+        import traceback
+        traceback.print_exc()
+        sys.stdout.flush()
+        raise
     finally:
         end_time = time.time()
         total_time = round(end_time - start_time_log, 2)

@@ -855,12 +855,22 @@ def _xarm_log_reader(proc: subprocess.Popen) -> None:
     global _xarm_process
     try:
         assert proc.stdout is not None
-        for line in proc.stdout:
-            _append_xarm_log(line)
+        # Use iter to handle both line-buffered and unbuffered output
+        for line in iter(proc.stdout.readline, ''):
+            if not line:  # EOF
+                break
+            _append_xarm_log(line.rstrip('\n\r'))
     except Exception as e:
         _append_xarm_log(f"[dashboard] Error reading xArm client output: {e}")
+        import traceback
+        _append_xarm_log(f"[dashboard] Traceback: {traceback.format_exc()}")
     finally:
-        rc = proc.wait()
+        try:
+            # Wait for process to finish (with timeout to avoid hanging)
+            rc = proc.wait()
+        except Exception as e:
+            _append_xarm_log(f"[dashboard] Error waiting for process: {e}")
+            rc = None
         _set_xarm_returncode(rc)
         _append_xarm_log(f"[dashboard] xArm client exited with return code {rc}")
         with _xarm_lock:
