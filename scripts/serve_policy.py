@@ -1,9 +1,13 @@
 import dataclasses
 import enum
 import logging
+import pathlib
 import socket
 
 import tyro
+
+import os
+import openpi.shared.download as _download
 
 from openpi.policies import policy as _policy
 from openpi.policies import policy_config as _policy_config
@@ -46,6 +50,7 @@ class Checkpoint:
     # Training config name (e.g., "pi0_aloha_sim").
     config: str
     # Checkpoint directory (e.g., "checkpoints/pi0_aloha_sim/exp/10000").
+    # Can be a local path, S3 path (s3://...), or Hugging Face repo ID (username/repo_name or hf://username/repo_name).
     dir: str
 
 
@@ -163,25 +168,64 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     ),
 }
 
+_HF_PREFIX = "hf://"
+
+def _maybe_download_from_huggingface(uri: str) -> pathlib.Path:
+    """Download a Hugging Face *model* repo and return the local checkpoint folder path."""
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError as e:
+        raise ImportError(
+            "huggingface_hub is required for loading checkpoints from Hugging Face.\n"
+            "Install it with: pip install huggingface-hub"
+        ) from e
+
+    # Strip prefix and split into repo_id + optional subpath
+    rest = uri[len(_HF_PREFIX):].lstrip("/")
+    parts = rest.split("/")
+
+    if len(parts) < 2:
+        raise ValueError(f"Invalid HF URI (expected hf://user/repo[/subpath]): {uri}")
+
+    repo_id = "/".join(parts[:2])      # user/repo
+    subpath = "/".join(parts[2:])      # e.g. 29999/... (optional)
+
+    logging.info("Downloading checkpoint from Hugging Face: %s", repo_id)
+    local_repo_dir = pathlib.Path(snapshot_download(repo_id=repo_id, repo_type="model"))
+
+    ckpt_dir = (local_repo_dir / subpath) if subpath else local_repo_dir
+    if not ckpt_dir.exists():
+        raise FileNotFoundError(f"Checkpoint folder not found: {ckpt_dir} (from {uri})")
+
+    return ckpt_dir
+
+
+def _resolve_checkpoint_dir(checkpoint_dir: str) -> str:
+    """Resolve checkpoint dir from hf://, s3://, or local path."""
+    if checkpoint_dir.startswith(_HF_PREFIX):
+        return str(_maybe_download_from_huggingface(checkpoint_dir))
+
+    # Let OpenPI handle s3:// and local paths (and its caching behavior).
+    return _download.maybe_download(checkpoint_dir)
+
+
 def create_default_policy(env: EnvMode, *, default_prompt: str | None = None) -> _policy.Policy:
     """Create a default policy for the given environment."""
     if checkpoint := DEFAULT_CHECKPOINT.get(env):
+        checkpoint_dir = _resolve_checkpoint_dir(checkpoint.dir)
         return _policy_config.create_trained_policy(
-            _config.get_config(checkpoint.config), checkpoint.dir, default_prompt=default_prompt
+            _config.get_config(checkpoint.config), checkpoint_dir, default_prompt=default_prompt
         )
     raise ValueError(f"Unsupported environment mode: {env}")
-
-
-
-
 
 
 def create_policy(args: Args) -> _policy.Policy:
     """Create a policy from the given arguments."""
     match args.policy:
         case Checkpoint():
+            checkpoint_dir = _resolve_checkpoint_dir(args.policy.dir)
             return _policy_config.create_trained_policy(
-                _config.get_config(args.policy.config), args.policy.dir, default_prompt=args.default_prompt
+                _config.get_config(args.policy.config), checkpoint_dir, default_prompt=args.default_prompt
             )
         case Default():
             return create_default_policy(args.env, default_prompt=args.default_prompt)
