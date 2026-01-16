@@ -41,6 +41,7 @@ class EnvMode(enum.Enum):
 
     DEMO = "demo"
     DEMO_SERVER = "demo_server"
+    HUGGING_FACE = "hugging_face"
 
 
 @dataclasses.dataclass
@@ -166,6 +167,11 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
         config="pi0_lora_xarm6_agrivla_pi0_all",
         dir="src/openpi/checkpoints/AgriVLA/29999",
     ),
+    EnvMode.HUGGING_FACE: Checkpoint(
+        config="pi0_lora_xarm6_agrivla_pi0_all",
+        dir="hf://dpadbury/AgriVLA/29999",
+    ),
+
 }
 
 _HF_PREFIX = "hf://"

@@ -890,6 +890,7 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
             "--remote_host", "localhost",
             "--remote_port", str(XARM_PORT),
             "--prompt", prompt,
+            "--mock",
         ]
 
         env = _make_child_env()
