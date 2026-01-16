@@ -889,14 +889,16 @@ def _xarm_log_reader(proc: subprocess.Popen) -> None:
 @app.post("/api/run-xarm", response_class=JSONResponse)
 def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
     global _xarm_process
-    _append_xarm_log("[dashboard] Run XArm client pressed.")
+    _append_xarm_log("[DEBUG] Run XArm client pressed.")
     with _status_lock:
         state = _last_status["state"]
-    _append_xarm_log(f"[dashboard] State: {state}")
+    _append_xarm_log(f"[DEBUG] State: {state}")
     if state != OrchestratorState.READY.value:
         raise HTTPException(status_code=400, detail=f"Policy server not READY (current state: {state}). Start it first.")
-    _append_xarm_log(f"[dashboard] State is READY")
+    _append_xarm_log(f"[DEBUG] State is READY")
+    _append_xarm_log(f"[DEBUG] Acquiring xArm lock")
     with _xarm_lock:
+        _append_xarm_log(f"[DEBUG] XArm lock acquired")
         if _xarm_process is not None and _xarm_process.poll() is None:
             raise HTTPException(status_code=409, detail="xArm client is already running.")
 
@@ -904,6 +906,7 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
 
         # Match your known-good CLI shape, but make it robust with env/cwd.
         # Note: PYTHONUNBUFFERED is set in _make_child_env() to ensure output is visible
+        _append_xarm_log(f"[DEBUG] Making command")
         cmd = [
             "uv", "run",
             "src/xarm6_control/cli/main.py",
@@ -912,9 +915,11 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
             "--prompt", prompt,
             "--mock",
         ]
-
+        _append_xarm_log(f"[DEBUG] Command: {' '.join(cmd)}")
+        _append_xarm_log(f"[DEBUG] Making environment")
         env = _make_child_env()
-
+        _append_xarm_log(f"[DEBUG] Environment: {env}")
+        _append_xarm_log(f"[DEBUG] Opening process")
         proc = subprocess.Popen(
             cmd,
             cwd=str(OPENPI_ROOT),
