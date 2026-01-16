@@ -697,6 +697,14 @@ def api_policy_server_log() -> Dict[str, Any]:
     }
 
 
+@app.post("/api/clear-local-log", response_class=JSONResponse)
+def api_clear_local_log() -> Dict[str, Any]:
+    """Clear the local policy server log lines."""
+    with _local_server_log_lock:
+        _local_server_log_lines.clear()
+    return {"status": "cleared"}
+
+
 @app.get("/api/hpc-diagnostics", response_class=JSONResponse)
 def api_hpc_diagnostics() -> Dict[str, Any]:
     orch = _orchestrator
@@ -724,7 +732,7 @@ def api_run_server(req: RunServerRequest) -> Dict[str, Any]:
         _set_hpc_cancel_requested(False)
         _set_status(OrchestratorState.SUBMITTING_JOB.value, "Submitting policy server job...", server_mode=ServerMode.HPC)
 
-        _append_local_server_log("[dashboard] Run Local pressed.")
+        _append_local_server_log("[dashboard] Run HPC server pressed.")
         started = _start_orchestrator_thread()
         if not started:
             _set_active_mode(None)
@@ -853,20 +861,21 @@ def api_camera_status() -> Dict[str, Any]:
 
 def _xarm_log_reader(proc: subprocess.Popen) -> None:
     global _xarm_process
+    _append_xarm_log("[dashboard] Log reader thread started, waiting for output...")
     try:
         assert proc.stdout is not None
-        # Use iter to handle both line-buffered and unbuffered output
-        for line in iter(proc.stdout.readline, ''):
-            if not line:  # EOF
+        while True:
+            line = proc.stdout.readline()
+            if line == '':  # EOF - process has exited
                 break
-            _append_xarm_log(line.rstrip('\n\r'))
+            if line:
+                _append_xarm_log(line.rstrip('\n\r'))
     except Exception as e:
         _append_xarm_log(f"[dashboard] Error reading xArm client output: {e}")
         import traceback
         _append_xarm_log(f"[dashboard] Traceback: {traceback.format_exc()}")
     finally:
         try:
-            # Wait for process to finish (with timeout to avoid hanging)
             rc = proc.wait()
         except Exception as e:
             _append_xarm_log(f"[dashboard] Error waiting for process: {e}")
@@ -894,6 +903,7 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
         prompt = (req.prompt or DEFAULT_XARM_PROMPT).strip() or DEFAULT_XARM_PROMPT
 
         # Match your known-good CLI shape, but make it robust with env/cwd.
+        # Note: PYTHONUNBUFFERED is set in _make_child_env() to ensure output is visible
         cmd = [
             "uv", "run",
             "src/xarm6_control/cli/main.py",

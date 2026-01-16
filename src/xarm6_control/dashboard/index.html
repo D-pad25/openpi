@@ -701,9 +701,14 @@
     }
   });
 
-  els.btnClearLocalLog.addEventListener("click", ()=>{
-    els.localLog.textContent = "—";
-    toast("Cleared local log view (server still retains recent lines).");
+  els.btnClearLocalLog.addEventListener("click", async ()=>{
+    try{
+      await fetchJSON("/api/clear-local-log", { method:"POST" });
+      els.localLog.textContent = "—";
+      toast("Local log cleared.");
+    }catch(e){
+      toast("Clear log failed: " + e.message);
+    }
   });
 
   els.promptBox.value = "Pick a ripe, red tomato and drop it in the blue bucket. [crop=tomato]";
