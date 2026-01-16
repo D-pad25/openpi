@@ -19,14 +19,43 @@ import argparse
 import platform
 from pathlib import Path
 
-# Add src/ to path
-script_dir = Path(__file__).resolve().parent
-src_dir = script_dir.parent.parent.parent
-if str(src_dir) not in sys.path:
-    sys.path.insert(0, str(src_dir))
+# Add src/ to path so we can import xarm6_control
+script_file = Path(__file__).resolve()
 
+# Go up: test_gripper_modes.py -> tests/ -> xarm6_control/ -> src/
+src_dir = script_file.parent.parent.parent
+
+# Also try to find repo root and src/ from current working directory as fallback
+current_dir = Path.cwd()
+if (current_dir / "src" / "xarm6_control").exists():
+    src_dir = current_dir / "src"
+
+# Ensure src/ is in sys.path (remove if already there, then add to front)
+src_dir_str = str(src_dir)
+if src_dir_str in sys.path:
+    sys.path.remove(src_dir_str)
+sys.path.insert(0, src_dir_str)
+
+# Verify we can find xarm6_control before importing
+xarm6_path = src_dir / 'xarm6_control'
+if not xarm6_path.exists():
+    print(f"ERROR: Could not find xarm6_control package!")
+    print(f"  Script location: {script_file}")
+    print(f"  Calculated src_dir: {src_dir}")
+    print(f"  Expected xarm6_control at: {xarm6_path}")
+    print(f"  Current sys.path: {sys.path[:3]}...")
+    raise RuntimeError(
+        f"Could not find xarm6_control package at {xarm6_path}.\n"
+        f"Please ensure you're running from the repository root."
+    )
+
+# Now import (make USB imports lazy so ROS mode can work without USB dependencies)
 from xarm6_control.hardware.gripper.client_async import GripperClient, GripperClientAsync
-from xarm6_control.hardware.gripper.dynamixel_usb import GripperUSBClient, DynamixelUSBGripper
+
+# USB imports will be done lazily in test_usb_mode() to allow testing ROS mode
+# even if dynamixel-sdk is not installed
+GripperUSBClient = None
+DynamixelUSBGripper = None
 
 
 def detect_default_usb_port():
@@ -139,6 +168,20 @@ def test_ros_mode(host="127.0.0.1", port=22345, timeout=5.0):
 
 def test_usb_mode(port=None, baudrate=57600):
     """Test USB gripper mode via direct Dynamixel connection."""
+    # Lazy import USB modules (only needed for USB mode)
+    global GripperUSBClient, DynamixelUSBGripper
+    if GripperUSBClient is None or DynamixelUSBGripper is None:
+        try:
+            from xarm6_control.hardware.gripper.dynamixel_usb import GripperUSBClient, DynamixelUSBGripper
+        except ImportError as e:
+            print("\n" + "="*60)
+            print("Testing USB Mode (Direct Dynamixel)")
+            print("="*60)
+            print(f"\n❌ Failed to import USB gripper modules: {e}")
+            print("\nPlease install required dependencies for USB mode:")
+            print("  pip install dynamixel-sdk pyserial")
+            return False
+    
     print("\n" + "="*60)
     print("Testing USB Mode (Direct Dynamixel)")
     print("="*60)
