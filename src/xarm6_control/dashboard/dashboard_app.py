@@ -134,7 +134,8 @@ _local_start_thread: Optional[threading.Thread] = None
 _local_start_thread_lock = threading.Lock()
 
 # xArm client process + logs
-_xarm_lock = threading.Lock()
+# Use RLock (reentrant) because _append_xarm_log() is called both inside and outside locked sections
+_xarm_lock = threading.RLock()
 _xarm_process: Optional[subprocess.Popen] = None
 _xarm_log_lines: List[str] = []
 _xarm_returncode: Optional[int] = None
