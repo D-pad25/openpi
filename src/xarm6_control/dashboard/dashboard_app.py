@@ -812,6 +812,7 @@ def api_start_cameras() -> Dict[str, Any]:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            **_popen_kwargs_new_session(),
         )
 
         time.sleep(3.0)
@@ -852,11 +853,20 @@ def _stop_camera_server() -> tuple[bool, str]:
             break
         time.sleep(0.1)
 
-    if proc.poll() is None and os.name != "nt":
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except Exception as e:
-            return False, f"Failed to SIGKILL camera server group: {e}"
+    if proc.poll() is None:
+        if os.name != "nt":
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception as e:
+                    return False, f"Failed to SIGKILL camera server group: {e}"
+        else:
+            try:
+                proc.kill()
+            except Exception as e:
+                return False, f"Failed to kill camera server: {e}"
 
     with _camera_server_lock:
         _camera_server_process = None
