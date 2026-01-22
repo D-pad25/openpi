@@ -300,6 +300,13 @@
     <label class="badge">Prompt</label>
     <textarea id="promptBox" placeholder="Enter a prompt..."></textarea>
 
+    <div style="height:10px;"></div>
+    <label class="badge">Gripper Mode</label>
+    <select id="gripperMode" class="input">
+      <option value="ros" selected>ros (TCP/Teensy)</option>
+      <option value="usb">usb (direct Dynamixel)</option>
+    </select>
+
     <div class="row" style="margin-top:10px;">
       <button class="btnOk" id="btnRunXarm">Run xArm Client</button>
       <button class="btnDanger" id="btnStopXarm">Stop xArm Client</button>
@@ -383,6 +390,7 @@
     wristStat: document.getElementById('wristStat'),
 
     promptBox: document.getElementById('promptBox'),
+    gripperMode: document.getElementById('gripperMode'),
     btnRunXarm: document.getElementById('btnRunXarm'),
     btnStopXarm: document.getElementById('btnStopXarm'),
     xarmBadge: document.getElementById('xarmBadge'),
@@ -703,10 +711,11 @@
   els.btnRunXarm.addEventListener("click", async ()=>{
     try{
       const prompt = (els.promptBox.value || "").trim();
+      const gripper_mode = (els.gripperMode.value || "ros").trim();
       await fetchJSON("/api/run-xarm", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({prompt})
+        body: JSON.stringify({prompt, gripper_mode})
       });
       toast("xArm client started.");
     }catch(e){

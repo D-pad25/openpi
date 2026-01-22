@@ -567,6 +567,7 @@ INDEX_HTML = _INDEX_PATH.read_text(encoding="utf-8")
 
 class RunXarmRequest(BaseModel):
     prompt: Optional[str] = None
+    gripper_mode: Optional[str] = None
 
 class RunServerRequest(BaseModel):
     mode: ServerMode = ServerMode.LOCAL
@@ -986,6 +987,7 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
             raise HTTPException(status_code=409, detail="xArm client is already running.")
 
         prompt = (req.prompt or DEFAULT_XARM_PROMPT).strip() or DEFAULT_XARM_PROMPT
+        gripper_mode = (req.gripper_mode or "ros").strip().lower()
 
         # Match your known-good CLI shape, but make it robust with env/cwd.
         # Note: PYTHONUNBUFFERED is set in _make_child_env() to ensure output is visible
@@ -998,6 +1000,7 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
             "--remote_port", str(client_port),
             "--prompt", prompt,
             "--mock",
+            "--gripper_mode", gripper_mode,
         ]
         _append_xarm_log(f"[DEBUG] Command: {' '.join(cmd)}")
         _append_xarm_log(f"[DEBUG] Making environment")
