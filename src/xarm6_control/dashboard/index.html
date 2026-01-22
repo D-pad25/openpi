@@ -308,6 +308,21 @@
     </select>
 
     <div class="row" style="margin-top:10px;">
+      <div style="flex:1;">
+        <label class="badge">USB Port (usb)</label>
+        <input class="input" id="gripperUsbPort" placeholder="/dev/ttyUSB0 or COM3" />
+      </div>
+      <div style="flex:1;">
+        <label class="badge">Gripper Host (ros)</label>
+        <input class="input" id="gripperHost" placeholder="127.0.0.1" />
+      </div>
+      <div style="flex:1;">
+        <label class="badge">Gripper Port (ros)</label>
+        <input class="input" id="gripperPort" placeholder="22345" />
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
       <button class="btnOk" id="btnRunXarm">Run xArm Client</button>
       <button class="btnDanger" id="btnStopXarm">Stop xArm Client</button>
       <span class="badge" id="xarmBadge">xarm: —</span>
@@ -391,6 +406,9 @@
 
     promptBox: document.getElementById('promptBox'),
     gripperMode: document.getElementById('gripperMode'),
+    gripperUsbPort: document.getElementById('gripperUsbPort'),
+    gripperHost: document.getElementById('gripperHost'),
+    gripperPort: document.getElementById('gripperPort'),
     btnRunXarm: document.getElementById('btnRunXarm'),
     btnStopXarm: document.getElementById('btnStopXarm'),
     xarmBadge: document.getElementById('xarmBadge'),
@@ -712,10 +730,14 @@
     try{
       const prompt = (els.promptBox.value || "").trim();
       const gripper_mode = (els.gripperMode.value || "ros").trim();
+      const gripper_usb_port = (els.gripperUsbPort.value || "").trim();
+      const gripper_host = (els.gripperHost.value || "").trim();
+      const gripper_port_raw = (els.gripperPort.value || "").trim();
+      const gripper_port = gripper_port_raw ? Number(gripper_port_raw) : null;
       await fetchJSON("/api/run-xarm", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({prompt, gripper_mode})
+        body: JSON.stringify({prompt, gripper_mode, gripper_usb_port, gripper_host, gripper_port})
       });
       toast("xArm client started.");
     }catch(e){
@@ -743,6 +765,9 @@
   });
 
   els.promptBox.value = "Pick a ripe, red tomato and drop it in the blue bucket. [crop=tomato]";
+  els.gripperUsbPort.value = "/dev/ttyUSB0";
+  els.gripperHost.value = "127.0.0.1";
+  els.gripperPort.value = "22345";
 
   async function loop(){
     try { await pollStatus(); } catch(e){ }
