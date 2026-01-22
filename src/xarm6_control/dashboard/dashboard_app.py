@@ -960,6 +960,15 @@ def _xarm_log_reader(proc: subprocess.Popen) -> None:
             if _xarm_process is proc:
                 _xarm_process = None
 
+
+def _get_xarm_client_port() -> int:
+    """Get the local port the xArm client should connect to."""
+    mode = _get_display_mode()
+    if mode == ServerMode.HPC and _orchestrator is not None:
+        # Use the actual tunnel local port if it was changed (fallback to default).
+        return _orchestrator.local_port or _orchestrator.config.policy_port
+    return XARM_PORT
+
 @app.post("/api/run-xarm", response_class=JSONResponse)
 def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
     global _xarm_process
@@ -981,11 +990,12 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
         # Match your known-good CLI shape, but make it robust with env/cwd.
         # Note: PYTHONUNBUFFERED is set in _make_child_env() to ensure output is visible
         _append_xarm_log(f"[DEBUG] Making command")
+        client_port = _get_xarm_client_port()
         cmd = [
             "uv", "run",
             "src/xarm6_control/cli/main.py",
             "--remote_host", "localhost",
-            "--remote_port", str(XARM_PORT),
+            "--remote_port", str(client_port),
             "--prompt", prompt,
             "--mock",
         ]
