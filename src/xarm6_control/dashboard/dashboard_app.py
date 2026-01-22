@@ -866,26 +866,29 @@ def _stop_camera_server() -> tuple[bool, str]:
 
 @app.post("/api/stop-cameras", response_class=JSONResponse)
 def api_stop_cameras() -> Dict[str, Any]:
-    ok, detail = _stop_camera_server()
-    # Stop local camera backends to reduce reconnect spam
-    base_camera.stop(wait=False)
-    wrist_camera.stop(wait=False)
-    return {"status": "stopped" if ok else "not_running", "detail": detail}
+    def _do_stop() -> None:
+        _stop_camera_server()
+        # Stop local camera backends to reduce reconnect spam
+        base_camera.stop(wait=False)
+        wrist_camera.stop(wait=False)
+
+    threading.Thread(target=_do_stop, daemon=True).start()
+    return {"status": "stopping", "detail": "Stop requested."}
 
 
 @app.post("/api/reset-cameras", response_class=JSONResponse)
 def api_reset_cameras() -> Dict[str, Any]:
-    # Stop camera server if running
-    _stop_camera_server()
-    # Reset local clients
-    base_camera.reset()
-    wrist_camera.reset()
-    # Start the camera server again
-    try:
-        api_start_cameras()
-    except HTTPException as e:
-        return {"status": "error", "detail": str(e.detail)}
-    return {"status": "reset"}
+    def _do_reset() -> None:
+        _stop_camera_server()
+        base_camera.reset()
+        wrist_camera.reset()
+        try:
+            api_start_cameras()
+        except HTTPException as e:
+            _append_local_server_log(f"[dashboard] Reset cameras failed: {e.detail}")
+
+    threading.Thread(target=_do_reset, daemon=True).start()
+    return {"status": "resetting", "detail": "Reset requested."}
 
 
 @app.get("/video/base")

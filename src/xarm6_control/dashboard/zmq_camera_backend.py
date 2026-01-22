@@ -74,6 +74,13 @@ class ZmqCameraBackend:
     def stop(self, *, wait: bool = True, timeout_s: float = 2.0) -> None:
         """Stop the background thread and optionally wait for it to exit."""
         self._stop_event.set()
+        # Attempt to close the client to unblock any blocking read
+        try:
+            close_fn = getattr(self._client, "close", None)
+            if callable(close_fn):
+                close_fn()
+        except Exception as e:
+            print(f"[ZmqCameraBackend:{self.name}] error closing client during stop: {e}")
         if wait and self._thread is not None:
             self._thread.join(timeout=timeout_s)
 
