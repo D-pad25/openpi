@@ -45,6 +45,7 @@ class ZmqCameraBackend:
 
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._request_close: bool = False
 
         self._consecutive_errors = 0
         self._max_errors_before_reset = 5
@@ -73,14 +74,8 @@ class ZmqCameraBackend:
 
     def stop(self, *, wait: bool = True, timeout_s: float = 2.0) -> None:
         """Stop the background thread and optionally wait for it to exit."""
+        self._request_close = True
         self._stop_event.set()
-        # Attempt to close the client to unblock any blocking read
-        try:
-            close_fn = getattr(self._client, "close", None)
-            if callable(close_fn):
-                close_fn()
-        except Exception as e:
-            print(f"[ZmqCameraBackend:{self.name}] error closing client during stop: {e}")
         if wait and self._thread is not None:
             self._thread.join(timeout=timeout_s)
 
@@ -162,6 +157,15 @@ class ZmqCameraBackend:
                 dt = time.time() - t0
                 if dt < period:
                     time.sleep(period - dt)
+        # Close client on thread exit to avoid cross-thread close issues
+        if self._request_close:
+            try:
+                close_fn = getattr(self._client, "close", None)
+                if callable(close_fn):
+                    close_fn()
+            except Exception as e:
+                print(f"[ZmqCameraBackend:{self.name}] error closing client on exit: {e}")
+        self._request_close = False
 
     # ------------------------------------------------------------------
     # Public frame + status access
