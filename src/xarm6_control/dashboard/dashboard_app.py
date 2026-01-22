@@ -828,6 +828,66 @@ def api_start_cameras() -> Dict[str, Any]:
     return {"status": "started"}
 
 
+def _stop_camera_server() -> tuple[bool, str]:
+    global _camera_server_process
+    with _camera_server_lock:
+        proc = _camera_server_process
+
+    if proc is None or proc.poll() is not None:
+        return False, "Camera server is not running."
+
+    try:
+        if os.name != "nt":
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except Exception:
+                proc.terminate()
+        else:
+            proc.terminate()
+    except Exception as e:
+        return False, f"Failed to stop camera server: {e}"
+
+    for _ in range(30):  # ~3s
+        if proc.poll() is not None:
+            break
+        time.sleep(0.1)
+
+    if proc.poll() is None and os.name != "nt":
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except Exception as e:
+            return False, f"Failed to SIGKILL camera server group: {e}"
+
+    with _camera_server_lock:
+        _camera_server_process = None
+
+    return True, "Camera server stopped."
+
+
+@app.post("/api/stop-cameras", response_class=JSONResponse)
+def api_stop_cameras() -> Dict[str, Any]:
+    ok, detail = _stop_camera_server()
+    # Stop local camera backends to reduce reconnect spam
+    base_camera.stop(wait=False)
+    wrist_camera.stop(wait=False)
+    return {"status": "stopped" if ok else "not_running", "detail": detail}
+
+
+@app.post("/api/reset-cameras", response_class=JSONResponse)
+def api_reset_cameras() -> Dict[str, Any]:
+    # Stop camera server if running
+    _stop_camera_server()
+    # Reset local clients
+    base_camera.reset()
+    wrist_camera.reset()
+    # Start the camera server again
+    try:
+        api_start_cameras()
+    except HTTPException as e:
+        return {"status": "error", "detail": str(e.detail)}
+    return {"status": "reset"}
+
+
 @app.get("/video/base")
 def video_base() -> StreamingResponse:
     return StreamingResponse(

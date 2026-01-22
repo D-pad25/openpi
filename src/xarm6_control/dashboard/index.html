@@ -235,6 +235,8 @@
       </div>
       <div class="row">
         <button class="btnOk" id="btnStartCameras">Start Cameras</button>
+        <button class="btnDanger" id="btnStopCameras">Stop Cameras</button>
+        <button id="btnResetCameras">Reset Cameras</button>
       </div>
     </div>
 
@@ -374,6 +376,8 @@
     btnHpcModalConnect: document.getElementById('btnHpcModalConnect'),
 
     btnStartCameras: document.getElementById('btnStartCameras'),
+    btnStopCameras: document.getElementById('btnStopCameras'),
+    btnResetCameras: document.getElementById('btnResetCameras'),
     camBadge: document.getElementById('camBadge'),
     baseStat: document.getElementById('baseStat'),
     wristStat: document.getElementById('wristStat'),
@@ -581,6 +585,24 @@
       toast("Camera server start requested.");
     }catch(e){
       toast("Start cameras failed: " + e.message);
+    }
+  });
+
+  els.btnStopCameras.addEventListener("click", async ()=>{
+    try{
+      const r = await fetchJSON("/api/stop-cameras", { method:"POST" });
+      toast("Camera server stop requested: " + (r.detail || "ok"));
+    }catch(e){
+      toast("Stop cameras failed: " + e.message);
+    }
+  });
+
+  els.btnResetCameras.addEventListener("click", async ()=>{
+    try{
+      await fetchJSON("/api/reset-cameras", { method:"POST" });
+      toast("Camera server reset requested.");
+    }catch(e){
+      toast("Reset cameras failed: " + e.message);
     }
   });
 

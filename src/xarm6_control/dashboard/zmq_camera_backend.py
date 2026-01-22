@@ -71,8 +71,17 @@ class ZmqCameraBackend:
         self._thread.start()
         print(f"[ZmqCameraBackend:{self.name}] started (host={self.host}, port={self.port})")
 
-    def stop(self) -> None:
+    def stop(self, *, wait: bool = True, timeout_s: float = 2.0) -> None:
+        """Stop the background thread and optionally wait for it to exit."""
         self._stop_event.set()
+        if wait and self._thread is not None:
+            self._thread.join(timeout=timeout_s)
+
+    def reset(self) -> None:
+        """Reset the ZMQ client connection and restart the polling thread."""
+        self.stop(wait=True)
+        self._reset_client()
+        self.start()
 
     # ------------------------------------------------------------------
     # Internal helpers
