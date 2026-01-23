@@ -1005,7 +1005,7 @@ def api_run_xarm(req: RunXarmRequest) -> Dict[str, Any]:
             "--remote_host", "localhost",
             "--remote_port", str(client_port),
             "--prompt", prompt,
-            "--mock",
+            # "--mock",
             "--gripper_mode", gripper_mode,
             "--gripper_usb_port", gripper_usb_port,
             "--gripper_host", gripper_host,
