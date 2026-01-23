@@ -111,7 +111,7 @@ case "$cmd" in
   serve-policy)
     echo ">>> Starting policy server on HPC (port ${POLICY_PORT})..."
     run_hpc_cmd "export OPENPI_DATA_HOME=\$HOME/.cache/openpi; \
-      uv run scripts/serve_policy.py --env XARM --port ${POLICY_PORT}"
+      uv run scripts/serve_policy.py --env HUGGING_FACE --port ${POLICY_PORT}"
     # This will keep running in the SSH session until you stop it.
     ;;
 

@@ -86,7 +86,7 @@ export OPENPI_DATA_HOME=$HOME/.cache/openpi
 #### 1.4 Run the policy. Note that the configuration (checkpoints, norm stats etc.) are governed by the --env key
 
 ```bash
-uv run scripts/serve_policy.py --env XARM --port 8000
+uv run scripts/serve_policy.py --env HUGGING_FACE --port 8000
 ```
 
 ### 2. Set up SSH tunnel from client to the HPC server node

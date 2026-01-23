@@ -450,7 +450,7 @@ def _start_local_policy_server_blocking() -> None:
     cmd = [
         "uv", "run",
         "scripts/serve_policy.py",
-        "--env", "DEMO",
+        "--env", "HUGGING_FACE",
         "--port", str(XARM_PORT),
     ]
 

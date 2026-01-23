@@ -459,7 +459,7 @@ class Orchestrator:
             repo_dir = self.config.repo_dir or f"/home/{self.config.username}/openpi"
             venv_dir = self.config.venv_dir
 
-            job_cmd = "export OPENPI_DATA_HOME=$HOME/.cache/openpi; uv run scripts/serve_policy.py --env DEMO_SERVER --port 8000"
+            job_cmd = "export OPENPI_DATA_HOME=$HOME/.cache/openpi; uv run scripts/serve_policy.py --env HUGGING_FACE --port 8000"
             pbs_script = f"""#!/bin/bash
 #PBS -N openpi_cmd
 #PBS -q gpu_inter
