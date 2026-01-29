@@ -417,9 +417,6 @@ class Orchestrator:
         """
         Submit the policy server job.
 
-        Legacy path:
-          - If no username was provided, uses the existing local pipeline script (SSH alias workflow).
-
         Dashboard path:
           - If username/password are provided, submits qsub directly on the HPC via ssh.
             Assumes repo on HPC is /home/<username>/openpi.
@@ -431,36 +428,22 @@ class Orchestrator:
 
         self._emit_state(
             OrchestratorState.SUBMITTING_JOB,
-            "Submitting policy server job via pipeline script...",
+            "Submitting policy server job via SSH...",
         )
 
         if not self.config.username:
-            # Legacy: rely on your existing pipeline script (may use SSH alias config).
-            try:
-                result = self._run_local([str(self.config.pipeline_script), "serve-policy"], check=True)
-            except subprocess.CalledProcessError as e:
-                stdout = (e.stdout or "").strip()
-                stderr = (e.stderr or "").strip()
-                msg = "Failed to submit job.\n"
-                if stdout:
-                    msg += f"\n--- pipeline stdout ---\n{stdout}"
-                if stderr:
-                    msg += f"\n--- pipeline stderr ---\n{stderr}"
-                self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, msg.strip())
-                return False
-            except Exception as e:
-                self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, f"Failed to submit job: {e}")
-                return False
+            self._emit_state(
+                OrchestratorState.ERROR_JOB_SUBMISSION,
+                "Missing HPC credentials. Connect via the dashboard before running the server.",
+            )
+            return False
 
-            stdout = (result.stdout or "").strip()
-            stderr = (result.stderr or "").strip()
-        else:
-            # Dashboard: submit on HPC via ssh (credentials).
-            repo_dir = self.config.repo_dir or f"/home/{self.config.username}/openpi"
-            venv_dir = self.config.venv_dir
+        # Dashboard: submit on HPC via ssh (credentials).
+        repo_dir = self.config.repo_dir or f"/home/{self.config.username}/openpi"
+        venv_dir = self.config.venv_dir
 
-            job_cmd = "export OPENPI_DATA_HOME=$HOME/.cache/openpi; uv run scripts/serve_policy.py --env HUGGING_FACE --port 8000"
-            pbs_script = f"""#!/bin/bash
+        job_cmd = "export OPENPI_DATA_HOME=$HOME/.cache/openpi; uv run scripts/serve_policy.py --env HUGGING_FACE --port 8000"
+        pbs_script = f"""#!/bin/bash
 #PBS -N openpi_cmd
 #PBS -q gpu_inter
 #PBS -l select=1:ncpus=4:ngpus=1:mem=32gb
@@ -481,38 +464,38 @@ echo "PORT=8000"       >> "$HOME/.openpi_policy_endpoint"
 
 {job_cmd}
 """
-            remote = (
-                "set -euo pipefail; "
-                'JOBFILE=$(mktemp /tmp/openpi_job_XXXXXX.pbs); '
-                'cat > "$JOBFILE" <<\'EOF\'\n'
-                + pbs_script
-                + "\nEOF\n"
-                + 'qsub -V "$JOBFILE"; '
-                + 'rm -f "$JOBFILE";'
-            )
+        remote = (
+            "set -euo pipefail; "
+            'JOBFILE=$(mktemp /tmp/openpi_job_XXXXXX.pbs); '
+            'cat > "$JOBFILE" <<\'EOF\'\n'
+            + pbs_script
+            + "\nEOF\n"
+            + 'qsub -V "$JOBFILE"; '
+            + 'rm -f "$JOBFILE";'
+        )
 
-            try:
-                result = self._ssh_hpc(remote, check=True, timeout_s=120.0)
-            except subprocess.CalledProcessError as e:
-                stdout = (e.stdout or "").strip()
-                stderr = (e.stderr or "").strip()
-                msg = "Failed to submit job.\n"
-                if stdout:
-                    msg += f"\n--- qsub stdout ---\n{stdout}"
-                if stderr:
-                    msg += f"\n--- qsub stderr ---\n{stderr}"
-                self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, msg.strip())
-                return False
-            except subprocess.TimeoutExpired:
-                self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, "Timed out submitting job over SSH.")
-                return False
-            except Exception as e:
-                # Never include password in errors (it is only in env).
-                self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, f"Failed to submit job: {type(e).__name__}: {e}")
-                return False
+        try:
+            result = self._ssh_hpc(remote, check=True, timeout_s=120.0)
+        except subprocess.CalledProcessError as e:
+            stdout = (e.stdout or "").strip()
+            stderr = (e.stderr or "").strip()
+            msg = "Failed to submit job.\n"
+            if stdout:
+                msg += f"\n--- qsub stdout ---\n{stdout}"
+            if stderr:
+                msg += f"\n--- qsub stderr ---\n{stderr}"
+            self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, msg.strip())
+            return False
+        except subprocess.TimeoutExpired:
+            self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, "Timed out submitting job over SSH.")
+            return False
+        except Exception as e:
+            # Never include password in errors (it is only in env).
+            self._emit_state(OrchestratorState.ERROR_JOB_SUBMISSION, f"Failed to submit job: {type(e).__name__}: {e}")
+            return False
 
-            stdout = (result.stdout or "").strip()
-            stderr = (result.stderr or "").strip()
+        stdout = (result.stdout or "").strip()
+        stderr = (result.stderr or "").strip()
 
         job_id = None
         candidates = re.findall(r"\b\d+(?:\.\w+)?\b", stdout)
