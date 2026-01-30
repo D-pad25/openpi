@@ -113,7 +113,13 @@ class XArmRealEnv:
         print(f"Connecting to xArm at {ip}...")
         self._initialize_arm()
         print("xArm connected and initialized.")
+        self.gripper_mode = gripper_mode
         print(f"Setting up gripper client (mode: {gripper_mode})...")
+
+        # Debug tracing for gripper commands; enable with OPENPI_GRIPPER_DEBUG=1
+        self._gripper_debug = os.getenv("OPENPI_GRIPPER_DEBUG") == "1"
+        self._gripper_debug_every = int(os.getenv("OPENPI_GRIPPER_DEBUG_EVERY", "25"))
+        self._gripper_debug_step = 0
         
         # Initialize gripper based on mode
         if gripper_mode.lower() == "usb":
@@ -228,8 +234,24 @@ class XArmRealEnv:
         # print(f"[STEP] Joint action: {joint_action}, Gripper action: {gripper_action}")
         # print(f"[STEP] Joint action (deg): {joint_action_deg}, Gripper action: {gripper_action:.3f}")
         self.arm.set_servo_angle_j(joint_action, is_radian=True, wait=False)
-        # self.gripper.send_gripper_command(gripper_action) # THIS WAS THE OLD WAY
-        self.gripper.set(gripper_action) 
+
+        # Debug tracing: log gripper commands and responses periodically
+        self._gripper_debug_step += 1
+        debug_hit = self._gripper_debug and (self._gripper_debug_step % self._gripper_debug_every == 0)
+        if debug_hit:
+            raw = float(action[-1])
+            print(
+                f"[GRIPPER][DEBUG] step={self._gripper_debug_step} "
+                f"mode={self.gripper_mode} raw={raw:.4f} clipped={gripper_action:.4f}"
+            )
+        try:
+            resp = self.gripper.set(gripper_action)
+            if debug_hit:
+                print(f"[GRIPPER][DEBUG] set() response: {resp}")
+        except Exception as e:
+            if self._gripper_debug:
+                print(f"[GRIPPER][DEBUG] set() error: {type(e).__name__}: {e}")
+            raise
         # self.arm.set_gripper_position(gripper_mm, wait=False)
     
     def step_through_interpolated_trajectory(self,
