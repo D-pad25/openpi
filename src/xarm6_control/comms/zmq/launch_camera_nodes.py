@@ -34,23 +34,65 @@ def _port_in_use(host: str, port: int) -> bool:
 
 
 def _find_listening_pids(port: int) -> list[int]:
+    pids: list[int] = []
+
     lsof = shutil.which("lsof")
-    if not lsof:
-        return []
-    res = subprocess.run(
-        [lsof, "-t", f"-iTCP:{port}", "-sTCP:LISTEN"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if not res.stdout:
-        return []
-    pids = []
-    for line in res.stdout.splitlines():
-        line = line.strip()
-        if line.isdigit():
-            pids.append(int(line))
-    return pids
+    if lsof:
+        res = subprocess.run(
+            [lsof, "-t", f"-iTCP:{port}", "-sTCP:LISTEN"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        for line in (res.stdout or "").splitlines():
+            line = line.strip()
+            if line.isdigit():
+                pids.append(int(line))
+        if pids:
+            return pids
+
+    # Try ss as a fallback (common on Linux)
+    ss = shutil.which("ss")
+    if ss:
+        res = subprocess.run(
+            [ss, "-lptn", f"sport = :{port}"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        for line in (res.stdout or "").splitlines():
+            # Example: users:(("python",pid=1234,fd=3))
+            if "pid=" in line:
+                for part in line.split("pid=")[1:]:
+                    pid_str = ""
+                    for ch in part:
+                        if ch.isdigit():
+                            pid_str += ch
+                        else:
+                            break
+                    if pid_str:
+                        pids.append(int(pid_str))
+        if pids:
+            return sorted(set(pids))
+
+    # Try fuser as a last resort
+    fuser = shutil.which("fuser")
+    if fuser:
+        res = subprocess.run(
+            [fuser, "-n", "tcp", str(port)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        # fuser output can be like: "5000/tcp: 1234 5678"
+        tokens = (res.stdout or "").replace(":", " ").split()
+        for tok in tokens:
+            if tok.isdigit():
+                pids.append(int(tok))
+        if pids:
+            return sorted(set(pids))
+
+    return []
 
 
 def _kill_pids(pids: list[int], timeout_s: float, force: bool) -> None:
@@ -93,7 +135,7 @@ def _ensure_port_free(host: str, port: int, args: Args) -> None:
     if not pids:
         raise RuntimeError(
             f"Port {port} is in use, but no listening PID could be found. "
-            "Install `lsof` or stop the process manually."
+            "Install `lsof`, `ss`, or `fuser`, or stop the process manually."
         )
 
     print(f"[INFO] Attempting to stop existing listener(s) on port {port}: {pids}")
