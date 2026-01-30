@@ -123,7 +123,7 @@ class XArmRealEnv:
         
         # Initialize gripper based on mode
         if gripper_mode.lower() == "usb":
-            self.gripper = GripperUSBClient(port=gripper_usb_port, min_angle=0.0, max_angle=255.0)
+            self.gripper = GripperUSBClient(port=gripper_usb_port)
             print(f"Gripper USB client initialized on {gripper_usb_port}")
         elif gripper_mode.lower() == "ros":
             self.gripper = GripperClient(host=gripper_host, port=gripper_port)
