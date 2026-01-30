@@ -216,18 +216,7 @@ def test_usb_mode(port=None, baudrate=57600):
     
     try:
         print("\n[1] Testing GripperUSBClient...")
-        # client = GripperUSBClient(port=port, baudrate=baudrate)
-        client = GripperUSBClient(
-    port=port,
-    set_max_torque_limit=True,
-    torque_limit=1023,
-    set_max_speed=True,
-    moving_speed=0,
-    set_stiff_compliance=True,
-    compliance_margin=0,
-    compliance_slope=32,
-    min_step_ticks=5,
-)
+        client = GripperUSBClient(port=port, baudrate=baudrate)
 
         
         # Ping test
