@@ -116,6 +116,9 @@ _hpc_password: Optional[str] = None
 # Camera server process
 _camera_server_lock = threading.Lock()
 _camera_server_process: Optional[subprocess.Popen] = None
+_camera_log_lock = threading.Lock()
+_camera_log_lines: List[str] = []
+_MAX_CAMERA_LOG_LINES = 300
 
 # Orchestrator + thread
 _orchestrator: Optional[Orchestrator] = None
@@ -187,6 +190,24 @@ def _set_local_server_returncode(rc: Optional[int]) -> None:
     global _local_server_returncode
     with _local_server_log_lock:
         _local_server_returncode = rc
+
+
+def _append_camera_log(line: str) -> None:
+    line = line.rstrip("\n")
+    with _camera_log_lock:
+        _camera_log_lines.append(line)
+        if len(_camera_log_lines) > _MAX_CAMERA_LOG_LINES:
+            del _camera_log_lines[:-_MAX_CAMERA_LOG_LINES]
+    print(f"[camera-log] {line}")
+
+
+def _camera_log_reader(proc: subprocess.Popen) -> None:
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            _append_camera_log(line)
+    except Exception as e:
+        _append_camera_log(f"[dashboard] Error reading camera server output: {e}")
 
 
 
@@ -810,6 +831,11 @@ def api_start_cameras() -> Dict[str, Any]:
     with _camera_server_lock:
         if _camera_server_process is not None and _camera_server_process.poll() is None:
             raise HTTPException(status_code=409, detail="Camera server already running.")
+        if _camera_server_process is not None and _camera_server_process.poll() is not None:
+            _camera_server_process = None
+
+        with _camera_log_lock:
+            _camera_log_lines.clear()
 
         cmd = ["bash", str(PIPELINE_SCRIPT), "cameras"]
         proc = subprocess.Popen(
@@ -820,14 +846,13 @@ def api_start_cameras() -> Dict[str, Any]:
             text=True,
             **_popen_kwargs_new_session(),
         )
+        threading.Thread(target=_camera_log_reader, args=(proc,), daemon=True).start()
 
         time.sleep(3.0)
         ret = proc.poll()
         if ret is not None and ret != 0:
-            try:
-                output, _ = proc.communicate(timeout=1.0)
-            except Exception:
-                output = "<no output captured>"
+            with _camera_log_lock:
+                output = "\n".join(_camera_log_lines[-40:]) if _camera_log_lines else "<no output captured>"
             raise HTTPException(status_code=500, detail=f"Camera server exited early with code {ret}:\n{output}")
 
         _camera_server_process = proc

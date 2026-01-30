@@ -1,5 +1,7 @@
+import os
 import pickle
 import threading
+import time
 from typing import Optional, Tuple
 
 import numpy as np
@@ -102,6 +104,9 @@ class ZMQServerCamera:
         debug_message = f"Camera Sever Binding to {addr}, Camera: {camera}"
         print(debug_message)
         self._timeout_message = f"Timeout in Camera Server, Camera: {camera}"
+        self._debug_timeouts = os.getenv("OPENPI_CAMERA_DEBUG") == "1"
+        self._timeout_log_every_s = float(os.getenv("OPENPI_CAMERA_TIMEOUT_LOG_EVERY", "5.0"))
+        self._last_timeout_log = 0.0
 
         # Time out waiting for client requests so we can check stop flag
         self._socket.setsockopt(zmq.RCVTIMEO, 1000)  # 1000 ms
@@ -118,7 +123,11 @@ class ZMQServerCamera:
                 message = self._socket.recv()
             except zmq.Again:
                 # No request within timeout; just loop and re-check stop flag
-                print(self._timeout_message)
+                if self._debug_timeouts:
+                    now = time.time()
+                    if (now - self._last_timeout_log) >= self._timeout_log_every_s:
+                        print(self._timeout_message)
+                        self._last_timeout_log = now
                 continue
             except zmq.ZMQError as e:
                 print(f"[ZMQServerCamera] ZMQ error receiving: {e}")
