@@ -146,6 +146,7 @@ def main(
     gripper_usb_port: str = "/dev/ttyUSB0",  # Serial port for USB mode (Linux) or "COM3" (Windows)
     gripper_host: str = "127.0.0.1",  # Host for ROS mode TCP server
     gripper_port: int = 22345,  # Port for ROS mode TCP server
+    action_dim: int = 25, #25 Hz normal
 ):
     # Create a log directory if it doesn't exist
     if save:
@@ -220,7 +221,7 @@ def main(
                 sys.stdout.flush()
                 raise
             # Get new action_chunk if empty or 25 steps have passed
-            if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= 25:
+            if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= action_dim:
                 try:
                     # pad images as per policy requirements
                     # base_rgb = image_tools.resize_with_pad(obs["base_rgb"], 224, 224)
@@ -235,12 +236,12 @@ def main(
                         "prompt": prompt,
                     }
                     # Request new action chunk from policy
-                    if step_idx % 25 == 0:  # Log every 25 steps to avoid spam
+                    if step_idx % action_dim == 0:  # Log every action_dim steps to avoid spam
                         print(f"[Step {step_idx+1}] Requesting new action chunk from policy...")
                         sys.stdout.flush()
                     action_chunk = policy_client.infer(observation)["actions"]
                     actions_from_chunk_completed = 0
-                    if step_idx % 25 == 0:
+                    if step_idx % action_dim == 0:
                         print(f"[Step {step_idx+1}] ✅ Received action chunk with {len(action_chunk)} actions")
                         sys.stdout.flush()
                 except Exception as e:
