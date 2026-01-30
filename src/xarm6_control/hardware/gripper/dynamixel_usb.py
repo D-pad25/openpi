@@ -9,13 +9,11 @@ You want:
   0   = fully open
   255 = fully closed
 
-This file:
-- reads MX resolution divider (addr 22) to get correct tick range (4096/div)
-- converts degrees -> ticks using 0..360deg => 0..ticks_max
-- clamps to CW/CCW angle limits
-- provides debug so you can see if GOAL changes and whether it is MOVING
-
-Close Dynamixel Wizard before running this (serial port is exclusive).
+Notes:
+- Your MX-106 reports 0..360° (Joint mode) over 0..(units_per_rev-1) ticks.
+- Wizard-style mapping uses units_per_rev (e.g., 4096) in the scale.
+- We keep TORQUE ON by default even when exiting, so the servo continues moving
+  after the program ends (otherwise it "barely moves" if you torque-off immediately).
 
 Requirements:
   pip install dynamixel-sdk pyserial
@@ -28,24 +26,14 @@ import platform
 import time
 from typing import Optional, Dict, Any
 
-try:
-    from dynamixel_sdk import PortHandler, PacketHandler, COMM_SUCCESS
-except ImportError as e:
-    raise ImportError(
-        "dynamixel-sdk not installed. Install with:\n"
-        "  pip install dynamixel-sdk pyserial\n"
-    ) from e
+from dynamixel_sdk import PortHandler, PacketHandler, COMM_SUCCESS
 
 
 # ---------------- Protocol 1.0 MX Control Table ----------------
 ADDR_MODEL_NUMBER = 0            # 2 bytes
 ADDR_FIRMWARE_VERSION = 2        # 1 byte
-ADDR_ID = 3                      # 1 byte
-ADDR_BAUD_RATE = 4               # 1 byte
-
 ADDR_CW_ANGLE_LIMIT = 6          # 2 bytes
 ADDR_CCW_ANGLE_LIMIT = 8         # 2 bytes
-
 ADDR_RESOLUTION_DIVIDER = 22     # 1 byte (MX only)
 
 ADDR_TORQUE_ENABLE = 24          # 1 byte
@@ -73,13 +61,8 @@ def _default_port() -> str:
 
 
 def _decode_signed_10bit_dir(raw: int) -> int:
-    """
-    AX/MX Present Speed/Load encoding (Protocol 1.0):
-    - magnitude is 0..1023
-    - direction bit is 10 (value 1024). If set, direction is "CW" (often treated negative).
-    We'll return signed int in [-1023..+1023].
-    """
-    raw = int(raw) & 0x07FF  # keep 11 bits
+    """Present Speed/Load encoding (Protocol 1.0): mag 0..1023, dir bit10."""
+    raw = int(raw) & 0x07FF
     mag = raw & 0x03FF
     cw = (raw & 0x0400) != 0
     return -mag if cw else mag
@@ -112,8 +95,8 @@ class DynamixelUSBGripper:
         self.fw: Optional[int] = None
 
         self.resolution_divider: int = 1
-        self.units_per_rev: int = BASE_UNITS_PER_REV
-        self.ticks_max: int = self.units_per_rev - 1
+        self.units_per_rev: int = BASE_UNITS_PER_REV  # e.g., 4096/div
+        self.ticks_max: int = self.units_per_rev - 1  # e.g., 4095
 
         self.cw_limit: int = 0
         self.ccw_limit: int = self.ticks_max
@@ -165,15 +148,18 @@ class DynamixelUSBGripper:
 
     def _deg_to_ticks(self, deg_servo: float) -> int:
         """
-        Convert actual servo degrees (0..360) -> ticks (0..ticks_max),
-        then clamp to CW/CCW limits.
+        Wizard-style mapping:
+          ticks = round((deg/360) * units_per_rev)
+          then clamp to [0..ticks_max]
         """
         d = float(deg_servo)
         if self.invert:
             d = BASE_FULL_SCALE_DEG - d
         d = max(0.0, min(BASE_FULL_SCALE_DEG, d))
 
-        ticks = int(round((d / BASE_FULL_SCALE_DEG) * self.ticks_max))
+        ticks = int(round((d / BASE_FULL_SCALE_DEG) * self.units_per_rev))
+        if ticks > self.ticks_max:
+            ticks = self.ticks_max
 
         lo = min(self.cw_limit, self.ccw_limit)
         hi = max(self.cw_limit, self.ccw_limit)
@@ -181,7 +167,7 @@ class DynamixelUSBGripper:
 
     def _ticks_to_deg(self, ticks: int) -> float:
         t = max(0, min(self.ticks_max, int(ticks)))
-        deg = (t / float(self.ticks_max)) * BASE_FULL_SCALE_DEG
+        deg = (t / float(self.units_per_rev)) * BASE_FULL_SCALE_DEG
         if self.invert:
             deg = BASE_FULL_SCALE_DEG - deg
         return deg
@@ -190,14 +176,15 @@ class DynamixelUSBGripper:
     def connect(self) -> None:
         if self._is_connected:
             try:
-                if hasattr(self.port_handler, "is_open") and self.port_handler.is_open:
+                if getattr(self.port_handler, "is_open", False):
                     return
             except Exception:
                 pass
             self._is_connected = False
 
+        # best-effort close
         try:
-            if hasattr(self.port_handler, "is_open") and self.port_handler.is_open:
+            if getattr(self.port_handler, "is_open", False):
                 self.port_handler.closePort()
         except Exception:
             pass
@@ -217,15 +204,11 @@ class DynamixelUSBGripper:
                 pass
             raise RuntimeError(f"Failed to set baudrate {self.baudrate} on {self.port_name}")
 
-        # ping first
-        ping = self.ping()
-        if not ping.get("ok"):
-            raise RuntimeError(f"Ping failed: {ping}")
-
-        # read key config
+        # Read key config
         self.model_number = self._r2(ADDR_MODEL_NUMBER)
         self.fw = self._r1(ADDR_FIRMWARE_VERSION)
 
+        # MX resolution divider (1 => 4096/rev)
         try:
             div = self._r1(ADDR_RESOLUTION_DIVIDER)
             self.resolution_divider = int(div) if int(div) > 0 else 1
@@ -264,26 +247,23 @@ class DynamixelUSBGripper:
                 f"  moving_speed={spd} torque_limit={tl}"
             )
 
-    def disconnect(self) -> None:
-        if self._is_connected:
+    def disconnect(self, disable_torque: bool = False) -> None:
+        # Only torque off if explicitly requested
+        if self._is_connected and disable_torque:
             try:
-                if hasattr(self.port_handler, "is_open") and self.port_handler.is_open:
-                    try:
-                        self._w1(ADDR_TORQUE_ENABLE, 0)
-                    except Exception:
-                        pass
+                self._w1(ADDR_TORQUE_ENABLE, 0)
             except Exception:
                 pass
 
         try:
-            if hasattr(self.port_handler, "is_open") and self.port_handler.is_open:
+            if getattr(self.port_handler, "is_open", False):
                 self.port_handler.closePort()
         except Exception:
             pass
 
         self._is_connected = False
         if self.verbose:
-            print(f"[DynamixelUSB] Disconnected port={self.port_name}")
+            print(f"[DynamixelUSB] Disconnected port={self.port_name} (disable_torque={disable_torque})")
 
     # ---------------- diagnostics ----------------
     def read_status(self) -> Dict[str, Any]:
@@ -319,11 +299,15 @@ class DynamixelUSBGripper:
             "temperature_c": temp,
             "cw_limit": self.cw_limit,
             "ccw_limit": self.ccw_limit,
+            "units_per_rev": self.units_per_rev,
             "ticks_max": self.ticks_max,
         }
 
     # ---------------- public API ----------------
     def ping(self, max_retries: int = 2) -> dict:
+        if not self._is_connected:
+            self.connect()
+
         last_error = None
         for attempt in range(int(max_retries)):
             try:
@@ -345,10 +329,8 @@ class DynamixelUSBGripper:
 
     def set_degrees(self, cmd_deg_0_to_255: float, *, wait_s: float = 0.0, poll_hz: float = 50.0) -> dict:
         """
-        Sends your command domain degrees directly: 0..255.
-
-        This is interpreted as *actual servo degrees* within 0..360:
-          ticks = (deg/360) * ticks_max
+        Send your command domain degrees directly: 0..255.
+        We interpret that as actual servo degrees (0..255°) and convert to ticks.
         """
         if not self._is_connected:
             self.connect()
@@ -356,10 +338,7 @@ class DynamixelUSBGripper:
         cmd_deg = self._clamp_cmd_deg(cmd_deg_0_to_255)
         ticks = self._deg_to_ticks(cmd_deg)
 
-        # Write goal
         self._w2(ADDR_GOAL_POSITION, ticks)
-
-        # Read back goal to confirm it latched
         goal_back = self._r2(ADDR_GOAL_POSITION)
 
         norm = self._cmd_deg_to_norm(cmd_deg)
@@ -415,29 +394,29 @@ class DynamixelUSBGripper:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.disconnect()
+        self.disconnect(disable_torque=False)
 
 
 class GripperUSBClient:
+    """Wrapper matching your existing GripperClient shape."""
+
     def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 57600, dxl_id: int = 1, **kwargs):
         self._gripper = DynamixelUSBGripper(port=port, baudrate=baudrate, dxl_id=dxl_id, **kwargs)
 
-    def set(self, value: float) -> dict:
-        return self._gripper.set(value)
+    def set(self, value: float, **kwargs) -> dict:
+        return self._gripper.set(value, **kwargs)
 
-    def set_degrees(self, deg_command: float) -> dict:
-        return self._gripper.set_degrees(deg_command)
+    def set_degrees(self, deg_command: float, **kwargs) -> dict:
+        return self._gripper.set_degrees(deg_command, **kwargs)
 
     def get(self) -> dict:
         return self._gripper.get()
 
     def ping(self) -> dict:
-        if not self._gripper._is_connected:
-            self._gripper.connect()
         return self._gripper.ping()
 
-    def disconnect(self):
-        self._gripper.disconnect()
+    def disconnect(self, disable_torque: bool = False):
+        self._gripper.disconnect(disable_torque=disable_torque)
 
 
 # ---------------- CLI ----------------
@@ -448,6 +427,7 @@ def main():
     ap.add_argument("--id", type=int, default=1)
     ap.add_argument("--invert", action="store_true")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--torque-off-on-exit", action="store_true", help="Disable torque when exiting")
 
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("ping")
@@ -474,27 +454,20 @@ def main():
 
     try:
         if args.cmd == "ping":
-            g.connect()
             print(g.ping())
-
         elif args.cmd == "get":
             print(g.get())
-
         elif args.cmd == "diag":
             print(g.read_status())
-
         elif args.cmd == "set-deg":
             print(g.set_degrees(args.deg, wait_s=args.wait))
-
         elif args.cmd == "set":
             print(g.set(args.norm, wait_s=args.wait))
-
         else:
             raise RuntimeError("Unknown command")
-
     finally:
         try:
-            g.disconnect()
+            g.disconnect(disable_torque=args.torque_off_on_exit)
         except Exception:
             pass
 
