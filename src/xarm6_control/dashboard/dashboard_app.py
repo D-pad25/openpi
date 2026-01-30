@@ -188,6 +188,8 @@ def _set_local_server_returncode(rc: Optional[int]) -> None:
     with _local_server_log_lock:
         _local_server_returncode = rc
 
+
+
 def _append_xarm_log(line: str) -> None:
     line = line.rstrip("\n")
     with _xarm_lock:
@@ -931,6 +933,8 @@ def api_camera_status() -> Dict[str, Any]:
         "base": base_camera.get_status(),
         "wrist": wrist_camera.get_status(),
     }
+
+
 
 
 # ============================================================

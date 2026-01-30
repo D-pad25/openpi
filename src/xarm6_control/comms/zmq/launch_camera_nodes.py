@@ -168,14 +168,46 @@ def main(args):
         # start a python process for each camera
         _ensure_port_free(args.hostname, camera_port, args)
         print(f"Launching camera {camera_id} on port {camera_port}")
-        camera_servers.append(
-            Process(target=launch_server, args=(camera_port, camera_id, args))
-        )
+        camera_servers.append(Process(target=launch_server, args=(camera_port, camera_id, args)))
         camera_port += 1
 
     for server in camera_servers:
         server.start()
 
+    def _terminate_children():
+        for server in camera_servers:
+            if server.is_alive():
+                server.terminate()
+        for server in camera_servers:
+            server.join(timeout=2.0)
+
+    def _signal_handler(signum, frame):
+        print(f"[INFO] Received signal {signum}. Stopping camera servers...")
+        _terminate_children()
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
+
+    # Fail fast if any child exits immediately
+    time.sleep(1.0)
+    exited = [s for s in camera_servers if s.exitcode not in (None, 0)]
+    if exited:
+        codes = {s.pid: s.exitcode for s in exited}
+        _terminate_children()
+        raise SystemExit(f"Camera server failed to start: {codes}")
+
+    # Keep the parent alive so the dashboard can manage the process group
+    try:
+        while True:
+            time.sleep(1.0)
+            dead = [s for s in camera_servers if s.exitcode not in (None, 0)]
+            if dead:
+                codes = {s.pid: s.exitcode for s in dead}
+                _terminate_children()
+                raise SystemExit(f"Camera server exited: {codes}")
+    finally:
+        _terminate_children()
 
 if __name__ == "__main__":
     main(tyro.cli(Args))

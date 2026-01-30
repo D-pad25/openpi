@@ -256,6 +256,7 @@
         <img id="imgWrist" src="/video/wrist" alt="Wrist camera" />
       </div>
     </div>
+
   </section>
 
   <section class="card">
@@ -544,6 +545,7 @@
     els.wristStat.textContent = w.ok ? "ok" : (w.err ? "err" : "—");
     els.wristStat.className = "badge " + (w.ok ? "ok" : (w.err ? "err" : ""));
   }
+
 
   async function pollLogs(){
     const p = await fetchJSON("/api/policy-server-log");
