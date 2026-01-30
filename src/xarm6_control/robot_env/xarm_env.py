@@ -123,7 +123,7 @@ class XArmRealEnv:
         
         # Initialize gripper based on mode
         if gripper_mode.lower() == "usb":
-            self.gripper = GripperUSBClient(port=gripper_usb_port)
+            self.gripper = GripperUSBClient(port=gripper_usb_port, min_angle=0.0, max_angle=255.0)
             print(f"Gripper USB client initialized on {gripper_usb_port}")
         elif gripper_mode.lower() == "ros":
             self.gripper = GripperClient(host=gripper_host, port=gripper_port)
@@ -231,17 +231,7 @@ class XArmRealEnv:
             # Match ROS scaling: normalized 0..1 -> degrees 0..255 (Int16 in ROS path),
             # then map into USB gripper's [min_angle, max_angle] range.
             deg_cmd = int(round(raw_gripper_action * 255.0))
-            min_angle = 5.0
-            max_angle = 179.0
-            usb_impl = getattr(self.gripper, "_gripper", None)
-            if usb_impl is not None:
-                min_angle = getattr(usb_impl, "min_angle", min_angle)
-                max_angle = getattr(usb_impl, "max_angle", max_angle)
-            if max_angle > min_angle:
-                scaled = (deg_cmd - min_angle) / (max_angle - min_angle)
-            else:
-                scaled = 0.0
-            gripper_action = np.clip(scaled, 0, 1)
+            gripper_action = None
         else:
             gripper_action = np.clip(raw_gripper_action, 0, 1)
 
@@ -260,7 +250,7 @@ class XArmRealEnv:
                 print(
                     f"[GRIPPER][DEBUG] step={self._gripper_debug_step} "
                     f"mode={self.gripper_mode} raw={raw_gripper_action:.4f} "
-                    f"deg_cmd={deg_cmd} clipped={gripper_action:.4f}"
+                    f"deg_cmd={deg_cmd}"
                 )
             else:
                 print(
@@ -269,7 +259,10 @@ class XArmRealEnv:
                     f"clipped={gripper_action:.4f}"
                 )
         try:
-            resp = self.gripper.set(gripper_action)
+            if self.gripper_mode.lower() == "usb":
+                resp = self.gripper.set_degrees(deg_cmd)
+            else:
+                resp = self.gripper.set(gripper_action)
             if debug_hit:
                 print(f"[GRIPPER][DEBUG] set() response: {resp}")
         except Exception as e:

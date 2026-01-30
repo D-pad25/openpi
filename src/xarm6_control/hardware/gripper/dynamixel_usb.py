@@ -207,6 +207,45 @@ class DynamixelUSBGripper:
         # Clamp angle first
         angle_deg = max(self.min_angle, min(self.max_angle, angle_deg))
         return (angle_deg - self.min_angle) / (self.max_angle - self.min_angle)
+
+    def set_angle_deg(self, angle_deg: float, max_retries: int = 2) -> dict:
+        """
+        Set gripper position using a direct angle in degrees.
+        """
+        if not self._is_connected:
+            self.connect()
+
+        # Clamp angle and convert to Dynamixel position
+        angle_deg = max(self.min_angle, min(self.max_angle, float(angle_deg)))
+        dxl_position = self._angle_to_dxl_position(angle_deg)
+
+        import time
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                dxl_comm_result, dxl_error = self.packet_handler.write2ByteTxRx(
+                    self.port_handler, self.dxl_id, self.ADDR_GOAL_POSITION, dxl_position
+                )
+                if dxl_comm_result == COMM_SUCCESS and dxl_error == 0:
+                    normalized_value = self._angle_to_normalized(angle_deg)
+                    self._last_position = normalized_value
+                    return {
+                        "ok": True,
+                        "position": normalized_value,
+                        "angle_deg": angle_deg,
+                        "dxl_position": dxl_position,
+                    }
+                elif dxl_comm_result != COMM_SUCCESS:
+                    last_error = f"Comm error: {self.packet_handler.getTxRxResult(dxl_comm_result)}"
+                elif dxl_error != 0:
+                    last_error = f"Servo error: {self.packet_handler.getRxPacketError(dxl_error)}"
+            except Exception as e:
+                last_error = f"Exception: {e}"
+
+            if attempt < max_retries - 1:
+                time.sleep(0.05)
+
+        raise RuntimeError(f"Failed to set angle after {max_retries} attempts: {last_error}")
     
     def set(self, normalized_value: float, max_retries: int = 2) -> dict:
         """
@@ -384,6 +423,10 @@ class GripperUSBClient:
     def set(self, value: float) -> dict:
         """Set gripper position [0.0, 1.0]."""
         return self._gripper.set(value)
+
+    def set_degrees(self, angle_deg: float) -> dict:
+        """Set gripper position using degrees."""
+        return self._gripper.set_angle_deg(angle_deg)
     
     def get(self) -> dict:
         """Get gripper position [0.0, 1.0]."""
