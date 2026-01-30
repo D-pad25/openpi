@@ -4,14 +4,18 @@ dynamixel_usb.py
 
 MX-106 (Protocol 1.0) USB gripper control that matches Dynamixel Wizard.
 
-What you asked for:
-- Send commands in "degrees" from 0..255
+You want:
+- send "degrees" in 0..255
   0   = fully open
-  255 = fully closed (as shown in your Wizard screenshot)
+  255 = fully closed
 
-Important:
-- MX-106 uses 0..4095 ticks for ~0..360 degrees (not 0..1023 for 0..300 like AX)
-- This file converts degrees -> ticks correctly for MX using Resolution Divider.
+This file:
+- reads MX resolution divider (addr 22) to get correct tick range (4096/div)
+- converts degrees -> ticks using 0..360deg => 0..ticks_max
+- clamps to CW/CCW angle limits
+- provides debug so you can see if GOAL changes and whether it is MOVING
+
+Close Dynamixel Wizard before running this (serial port is exclusive).
 
 Requirements:
   pip install dynamixel-sdk pyserial
@@ -22,8 +26,7 @@ from __future__ import annotations
 import argparse
 import platform
 import time
-from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Dict, Any
 
 try:
     from dynamixel_sdk import PortHandler, PacketHandler, COMM_SUCCESS
@@ -34,12 +37,11 @@ except ImportError as e:
     ) from e
 
 
-# ---------------- Protocol 1.0 MX Control Table (common) ----------------
+# ---------------- Protocol 1.0 MX Control Table ----------------
 ADDR_MODEL_NUMBER = 0            # 2 bytes
 ADDR_FIRMWARE_VERSION = 2        # 1 byte
 ADDR_ID = 3                      # 1 byte
 ADDR_BAUD_RATE = 4               # 1 byte
-ADDR_RETURN_DELAY = 5            # 1 byte
 
 ADDR_CW_ANGLE_LIMIT = 6          # 2 bytes
 ADDR_CCW_ANGLE_LIMIT = 8         # 2 bytes
@@ -48,51 +50,43 @@ ADDR_RESOLUTION_DIVIDER = 22     # 1 byte (MX only)
 
 ADDR_TORQUE_ENABLE = 24          # 1 byte
 ADDR_GOAL_POSITION = 30          # 2 bytes
-ADDR_PRESENT_POSITION = 36       # 2 bytes
-
-# Optional (not required, but handy for debug)
 ADDR_MOVING_SPEED = 32           # 2 bytes
 ADDR_TORQUE_LIMIT = 34           # 2 bytes
+ADDR_PRESENT_POSITION = 36       # 2 bytes
+ADDR_PRESENT_SPEED = 38          # 2 bytes
+ADDR_PRESENT_LOAD = 40           # 2 bytes
+ADDR_PRESENT_VOLTAGE = 42        # 1 byte (0.1V)
+ADDR_PRESENT_TEMPERATURE = 43    # 1 byte (°C)
+ADDR_MOVING = 46                 # 1 byte (0/1)
+
+# ---------------- MX nominal full scale ----------------
+BASE_UNITS_PER_REV = 4096
+BASE_FULL_SCALE_DEG = 360.0
+
+# Your desired command domain
+CMD_MIN_DEG = 0.0
+CMD_MAX_DEG = 255.0
 
 
-@dataclass
-class GripperState:
-    ok: bool
-    position: float                    # normalized [0..1] over 0..255 command space
-    cmd_deg: Optional[float] = None    # 0..255 command degrees (your desired interface)
-    angle_deg: Optional[float] = None  # actual servo angle in degrees (0..~360)
-    dxl_position: Optional[int] = None
-    cached: bool = False
-    error: Optional[str] = None
+def _default_port() -> str:
+    return "COM3" if platform.system() == "Windows" else "/dev/ttyUSB0"
+
+
+def _decode_signed_10bit_dir(raw: int) -> int:
+    """
+    AX/MX Present Speed/Load encoding (Protocol 1.0):
+    - magnitude is 0..1023
+    - direction bit is 10 (value 1024). If set, direction is "CW" (often treated negative).
+    We'll return signed int in [-1023..+1023].
+    """
+    raw = int(raw) & 0x07FF  # keep 11 bits
+    mag = raw & 0x03FF
+    cw = (raw & 0x0400) != 0
+    return -mag if cw else mag
 
 
 class DynamixelUSBGripper:
-    """
-    USB controller for MX-series Dynamixel in Protocol 1.0.
-
-    Public API:
-      - set_degrees(cmd_deg_0_to_255)  -> sends degrees (0..255) as you requested
-      - set(norm_0_to_1)              -> maps to 0..255 degrees then sends
-      - get()                         -> returns cmd_deg + actual angle_deg + ticks
-      - ping()
-      - disconnect()
-
-    Notes:
-      - Uses Resolution Divider to compute ticks-per-rev correctly.
-      - Clamps goal ticks to CW/CCW angle limits.
-    """
-
     DXL_PROTOCOL_VERSION = 1.0
-
-    # MX nominal full scale:
-    # - with resolution divider = 1: 4096 units per rev (0..4095)
-    # We'll compute this dynamically from Resolution Divider.
-    BASE_UNITS_PER_REV = 4096
-    BASE_FULL_SCALE_DEG = 360.0
-
-    # Your desired command domain
-    CMD_MIN_DEG = 0.0
-    CMD_MAX_DEG = 255.0
 
     def __init__(
         self,
@@ -100,18 +94,13 @@ class DynamixelUSBGripper:
         baudrate: int = 57600,
         dxl_id: int = 1,
         *,
-        # If direction is flipped, set this True
         invert: bool = False,
-        # Small delay after writes (some USB adapters/servos behave better)
-        post_write_sleep_s: float = 0.00,
-        # Print register snapshot on connect
         verbose: bool = True,
     ):
         self.port_name = str(port)
         self.baudrate = int(baudrate)
         self.dxl_id = int(dxl_id)
         self.invert = bool(invert)
-        self.post_write_sleep_s = float(post_write_sleep_s)
         self.verbose = bool(verbose)
 
         self.port_handler = PortHandler(self.port_name)
@@ -119,15 +108,17 @@ class DynamixelUSBGripper:
 
         self._is_connected = False
 
-        # Resolved at connect()
         self.model_number: Optional[int] = None
+        self.fw: Optional[int] = None
+
         self.resolution_divider: int = 1
-        self.units_per_rev: int = self.BASE_UNITS_PER_REV
+        self.units_per_rev: int = BASE_UNITS_PER_REV
         self.ticks_max: int = self.units_per_rev - 1
+
         self.cw_limit: int = 0
         self.ccw_limit: int = self.ticks_max
 
-        self._last_norm = 0.0
+        self._last_norm: float = 0.0
 
     # ---------------- low-level IO ----------------
     def _w1(self, addr: int, val: int) -> None:
@@ -160,46 +151,39 @@ class DynamixelUSBGripper:
             raise RuntimeError(self.packet_handler.getRxPacketError(err))
         return int(val)
 
-    # ---------------- conversion ----------------
+    # ---------------- conversions ----------------
     def _clamp_cmd_deg(self, deg: float) -> float:
-        return max(self.CMD_MIN_DEG, min(self.CMD_MAX_DEG, float(deg)))
+        return max(CMD_MIN_DEG, min(CMD_MAX_DEG, float(deg)))
 
     def _cmd_deg_to_norm(self, deg: float) -> float:
         d = self._clamp_cmd_deg(deg)
-        return (d - self.CMD_MIN_DEG) / (self.CMD_MAX_DEG - self.CMD_MIN_DEG)
+        return (d - CMD_MIN_DEG) / (CMD_MAX_DEG - CMD_MIN_DEG)
 
     def _norm_to_cmd_deg(self, n: float) -> float:
         n = max(0.0, min(1.0, float(n)))
-        return self.CMD_MIN_DEG + n * (self.CMD_MAX_DEG - self.CMD_MIN_DEG)
+        return CMD_MIN_DEG + n * (CMD_MAX_DEG - CMD_MIN_DEG)
 
-    def _deg_to_ticks(self, deg: float) -> int:
+    def _deg_to_ticks(self, deg_servo: float) -> int:
         """
-        Convert *actual servo degrees* (0..360) to ticks (0..ticks_max),
+        Convert actual servo degrees (0..360) -> ticks (0..ticks_max),
         then clamp to CW/CCW limits.
         """
-        d = float(deg)
-
-        # Optional invert (swap direction)
+        d = float(deg_servo)
         if self.invert:
-            d = self.BASE_FULL_SCALE_DEG - d
+            d = BASE_FULL_SCALE_DEG - d
+        d = max(0.0, min(BASE_FULL_SCALE_DEG, d))
 
-        # Clamp to [0..360]
-        d = max(0.0, min(self.BASE_FULL_SCALE_DEG, d))
+        ticks = int(round((d / BASE_FULL_SCALE_DEG) * self.ticks_max))
 
-        # Convert degrees -> ticks (using computed ticks_max)
-        ticks = int(round((d / self.BASE_FULL_SCALE_DEG) * self.ticks_max))
-
-        # Clamp within configured limits (joint mode)
         lo = min(self.cw_limit, self.ccw_limit)
         hi = max(self.cw_limit, self.ccw_limit)
-        ticks = max(lo, min(hi, ticks))
-        return ticks
+        return max(lo, min(hi, ticks))
 
     def _ticks_to_deg(self, ticks: int) -> float:
         t = max(0, min(self.ticks_max, int(ticks)))
-        deg = (t / float(self.ticks_max)) * self.BASE_FULL_SCALE_DEG
+        deg = (t / float(self.ticks_max)) * BASE_FULL_SCALE_DEG
         if self.invert:
-            deg = self.BASE_FULL_SCALE_DEG - deg
+            deg = BASE_FULL_SCALE_DEG - deg
         return deg
 
     # ---------------- connection ----------------
@@ -212,7 +196,6 @@ class DynamixelUSBGripper:
                 pass
             self._is_connected = False
 
-        # best-effort close
         try:
             if hasattr(self.port_handler, "is_open") and self.port_handler.is_open:
                 self.port_handler.closePort()
@@ -234,59 +217,48 @@ class DynamixelUSBGripper:
                 pass
             raise RuntimeError(f"Failed to set baudrate {self.baudrate} on {self.port_name}")
 
-        # Verify comms via ping (and read model)
+        # ping first
         ping = self.ping()
         if not ping.get("ok"):
             raise RuntimeError(f"Ping failed: {ping}")
 
-        # Read model + resolution divider (MX)
+        # read key config
         self.model_number = self._r2(ADDR_MODEL_NUMBER)
-        fw = self._r1(ADDR_FIRMWARE_VERSION)
+        self.fw = self._r1(ADDR_FIRMWARE_VERSION)
 
-        # Resolution Divider exists on MX; if read fails, we’ll default to 1
         try:
             div = self._r1(ADDR_RESOLUTION_DIVIDER)
-            if div <= 0:
-                div = 1
-            self.resolution_divider = int(div)
+            self.resolution_divider = int(div) if int(div) > 0 else 1
         except Exception:
             self.resolution_divider = 1
 
-        # Compute units/ticks
-        # units_per_rev = 4096 / divider (divider=1 => 4096, divider=2 => 2048, etc.)
-        upr = int(self.BASE_UNITS_PER_REV // self.resolution_divider)
+        upr = int(BASE_UNITS_PER_REV // self.resolution_divider)
         if upr <= 0:
-            upr = self.BASE_UNITS_PER_REV
+            upr = BASE_UNITS_PER_REV
         self.units_per_rev = upr
         self.ticks_max = self.units_per_rev - 1
 
-        # Angle limits (joint mode)
         self.cw_limit = self._r2(ADDR_CW_ANGLE_LIMIT)
         self.ccw_limit = self._r2(ADDR_CCW_ANGLE_LIMIT)
 
-        # Wheel mode check
         if self.cw_limit == 0 and self.ccw_limit == 0:
             raise RuntimeError(
                 "Servo is in WHEEL mode (CW=0, CCW=0). It will NOT respond to GOAL_POSITION.\n"
-                "In Dynamixel Wizard, set it back to Joint mode by setting CCW Angle Limit > 0."
+                "In Dynamixel Wizard set CCW Angle Limit > 0 to restore Joint mode."
             )
 
-        # Ensure torque on
+        # torque on (like Teensy)
         self._w1(ADDR_TORQUE_ENABLE, 1)
 
         self._is_connected = True
         time.sleep(0.05)
 
         if self.verbose:
-            try:
-                spd = self._r2(ADDR_MOVING_SPEED)
-                tl = self._r2(ADDR_TORQUE_LIMIT)
-            except Exception:
-                spd, tl = None, None
-
+            spd = self._r2(ADDR_MOVING_SPEED)
+            tl = self._r2(ADDR_TORQUE_LIMIT)
             print(
                 f"[DynamixelUSB] Connected port={self.port_name} baud={self.baudrate} id={self.dxl_id}\n"
-                f"  model={self.model_number} fw={fw} protocol=1.0\n"
+                f"  model={self.model_number} fw={self.fw} protocol=1.0\n"
                 f"  resolution_divider={self.resolution_divider} units_per_rev={self.units_per_rev} ticks_max={self.ticks_max}\n"
                 f"  CW_limit={self.cw_limit} CCW_limit={self.ccw_limit} invert={self.invert}\n"
                 f"  moving_speed={spd} torque_limit={tl}"
@@ -313,6 +285,43 @@ class DynamixelUSBGripper:
         if self.verbose:
             print(f"[DynamixelUSB] Disconnected port={self.port_name}")
 
+    # ---------------- diagnostics ----------------
+    def read_status(self) -> Dict[str, Any]:
+        if not self._is_connected:
+            self.connect()
+
+        torque = self._r1(ADDR_TORQUE_ENABLE)
+        moving = self._r1(ADDR_MOVING)
+        goal = self._r2(ADDR_GOAL_POSITION)
+        pres = self._r2(ADDR_PRESENT_POSITION)
+
+        v_raw = self._r1(ADDR_PRESENT_VOLTAGE)
+        temp = self._r1(ADDR_PRESENT_TEMPERATURE)
+
+        spd_raw = self._r2(ADDR_PRESENT_SPEED)
+        load_raw = self._r2(ADDR_PRESENT_LOAD)
+
+        spd = _decode_signed_10bit_dir(spd_raw)
+        load = _decode_signed_10bit_dir(load_raw)
+
+        return {
+            "torque_enable": torque,
+            "moving": moving,
+            "goal_ticks": goal,
+            "present_ticks": pres,
+            "present_deg": self._ticks_to_deg(pres),
+            "goal_deg": self._ticks_to_deg(goal),
+            "present_speed_raw": spd_raw,
+            "present_speed_signed": spd,
+            "present_load_raw": load_raw,
+            "present_load_signed": load,
+            "voltage_v": v_raw / 10.0,
+            "temperature_c": temp,
+            "cw_limit": self.cw_limit,
+            "ccw_limit": self.ccw_limit,
+            "ticks_max": self.ticks_max,
+        }
+
     # ---------------- public API ----------------
     def ping(self, max_retries: int = 2) -> dict:
         last_error = None
@@ -334,72 +343,71 @@ class DynamixelUSBGripper:
 
         return {"ok": False, "error": last_error or "Unknown error"}
 
-    def set_degrees(self, cmd_deg_0_to_255: float) -> dict:
+    def set_degrees(self, cmd_deg_0_to_255: float, *, wait_s: float = 0.0, poll_hz: float = 50.0) -> dict:
         """
-        The function you want:
-          send degrees in [0..255] where
-            0   = open
-            255 = closed
+        Sends your command domain degrees directly: 0..255.
+
+        This is interpreted as *actual servo degrees* within 0..360:
+          ticks = (deg/360) * ticks_max
         """
         if not self._is_connected:
             self.connect()
 
         cmd_deg = self._clamp_cmd_deg(cmd_deg_0_to_255)
-
-        # IMPORTANT: cmd_deg is interpreted as *actual servo degrees* (0..255 out of 0..360)
         ticks = self._deg_to_ticks(cmd_deg)
+
+        # Write goal
         self._w2(ADDR_GOAL_POSITION, ticks)
 
-        if self.post_write_sleep_s > 0:
-            time.sleep(self.post_write_sleep_s)
+        # Read back goal to confirm it latched
+        goal_back = self._r2(ADDR_GOAL_POSITION)
 
         norm = self._cmd_deg_to_norm(cmd_deg)
         self._last_norm = norm
-        return {"ok": True, "position": norm, "cmd_deg": cmd_deg, "dxl_position": ticks}
 
-    def set(self, normalized_value: float) -> dict:
-        """
-        Compatibility with your existing tests:
-        normalized 0..1 -> command degrees 0..255 -> send.
-        """
+        out = {"ok": True, "position": norm, "cmd_deg": cmd_deg, "goal_ticks": ticks, "goal_readback": goal_back}
+
+        if wait_s and wait_s > 0:
+            dt = 1.0 / max(1.0, float(poll_hz))
+            t0 = time.time()
+            samples = []
+            while (time.time() - t0) < float(wait_s):
+                st = self.read_status()
+                samples.append(
+                    {
+                        "moving": st["moving"],
+                        "present_ticks": st["present_ticks"],
+                        "present_deg": st["present_deg"],
+                        "goal_ticks": st["goal_ticks"],
+                    }
+                )
+                time.sleep(dt)
+            out["samples"] = samples
+
+        return out
+
+    def set(self, normalized_value: float, *, wait_s: float = 0.0) -> dict:
         n = max(0.0, min(1.0, float(normalized_value)))
         cmd_deg = self._norm_to_cmd_deg(n)
-        out = self.set_degrees(cmd_deg)
+        out = self.set_degrees(cmd_deg, wait_s=wait_s)
         out["position"] = n
         return out
 
-    def get(self, max_retries: int = 2) -> dict:
+    def get(self) -> dict:
         if not self._is_connected:
             self.connect()
 
-        last_error = None
-        for attempt in range(int(max_retries)):
-            try:
-                ticks = self._r2(ADDR_PRESENT_POSITION)
-                angle_deg = self._ticks_to_deg(ticks)
-
-                # Convert the *measured* servo angle (0..360) into your command space (0..255)
-                cmd_deg = max(self.CMD_MIN_DEG, min(self.CMD_MAX_DEG, angle_deg))
-                norm = self._cmd_deg_to_norm(cmd_deg)
-
-                self._last_norm = norm
-                return {
-                    "ok": True,
-                    "position": norm,
-                    "cmd_deg": cmd_deg,
-                    "angle_deg": angle_deg,
-                    "dxl_position": ticks,
-                }
-            except Exception as e:
-                last_error = str(e)
-                if attempt < int(max_retries) - 1:
-                    time.sleep(0.05 * (attempt + 1))
-
+        st = self.read_status()
+        # represent measured position in your 0..255 space
+        cmd_deg_meas = max(CMD_MIN_DEG, min(CMD_MAX_DEG, st["present_deg"]))
+        norm = self._cmd_deg_to_norm(cmd_deg_meas)
+        self._last_norm = norm
         return {
-            "ok": False,
-            "position": self._last_norm,
-            "cached": True,
-            "error": last_error,
+            "ok": True,
+            "position": norm,
+            "cmd_deg": cmd_deg_meas,
+            "angle_deg": st["present_deg"],
+            "dxl_position": st["present_ticks"],
         }
 
     def __enter__(self):
@@ -411,10 +419,6 @@ class DynamixelUSBGripper:
 
 
 class GripperUSBClient:
-    """
-    Wrapper matching your existing 'client' shape.
-    """
-
     def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 57600, dxl_id: int = 1, **kwargs):
         self._gripper = DynamixelUSBGripper(port=port, baudrate=baudrate, dxl_id=dxl_id, **kwargs)
 
@@ -436,34 +440,27 @@ class GripperUSBClient:
         self._gripper.disconnect()
 
 
-# ---------------- CLI (optional quick test) ----------------
-def _default_port() -> str:
-    if platform.system() == "Windows":
-        return "COM3"
-    return "/dev/ttyUSB0"
-
-
+# ---------------- CLI ----------------
 def main():
-    ap = argparse.ArgumentParser(description="MX-106 USB gripper control: 0..255 degrees (0 open, 255 closed)")
+    ap = argparse.ArgumentParser(description="MX-106 USB gripper: send 0..255 degrees (0 open, 255 closed)")
     ap.add_argument("--port", default=_default_port())
     ap.add_argument("--baudrate", type=int, default=57600)
     ap.add_argument("--id", type=int, default=1)
     ap.add_argument("--invert", action="store_true")
     ap.add_argument("--quiet", action="store_true")
-    sub = ap.add_subparsers(dest="cmd", required=True)
 
+    sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("ping")
     sub.add_parser("get")
+    sub.add_parser("diag")
 
     p_sd = sub.add_parser("set-deg")
-    p_sd.add_argument("--deg", type=float, required=True, help="0..255 degrees (0 open, 255 closed)")
+    p_sd.add_argument("--deg", type=float, required=True, help="0..255 (0 open, 255 closed)")
+    p_sd.add_argument("--wait", type=float, default=0.0, help="poll for this many seconds after commanding")
 
     p_s = sub.add_parser("set")
-    p_s.add_argument("--norm", type=float, required=True, help="0..1 (mapped to 0..255 degrees)")
-
-    p_sw = sub.add_parser("sweep")
-    p_sw.add_argument("--delay", type=float, default=0.7)
-    p_sw.add_argument("--deg-list", type=float, nargs="+", default=[0, 255, 0])
+    p_s.add_argument("--norm", type=float, required=True, help="0..1 mapped to 0..255 degrees")
+    p_s.add_argument("--wait", type=float, default=0.0)
 
     args = ap.parse_args()
 
@@ -479,21 +476,22 @@ def main():
         if args.cmd == "ping":
             g.connect()
             print(g.ping())
+
         elif args.cmd == "get":
             print(g.get())
+
+        elif args.cmd == "diag":
+            print(g.read_status())
+
         elif args.cmd == "set-deg":
-            print(g.set_degrees(args.deg))
+            print(g.set_degrees(args.deg, wait_s=args.wait))
+
         elif args.cmd == "set":
-            print(g.set(args.norm))
-        elif args.cmd == "sweep":
-            print(g.get())
-            for d in args.deg_list:
-                out = g.set_degrees(d)
-                time.sleep(args.delay)
-                meas = g.get()
-                print({"cmd": out, "meas": meas})
+            print(g.set(args.norm, wait_s=args.wait))
+
         else:
             raise RuntimeError("Unknown command")
+
     finally:
         try:
             g.disconnect()
