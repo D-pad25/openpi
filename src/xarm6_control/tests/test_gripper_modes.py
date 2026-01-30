@@ -217,7 +217,7 @@ def test_usb_mode(port=None, baudrate=57600):
     try:
         print("\n[1] Testing GripperUSBClient...")
         client = GripperUSBClient(port=port, baudrate=baudrate)
-        self.gripper = GripperUSBClient(
+        client = GripperUSBClient(
     port=gripper_usb_port,
     set_max_torque_limit=True,
     torque_limit=1023,
