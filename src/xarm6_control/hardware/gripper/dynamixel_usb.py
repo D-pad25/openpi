@@ -2,37 +2,28 @@
 """
 dynamixel_usb.py
 
-Robust USB control for an AX-series (Protocol 1.0) Dynamixel gripper using dynamixel_sdk.
+MX-106 (Protocol 1.0) USB gripper control that matches Dynamixel Wizard.
 
-Why this version is different (and why it often fixes "USB barely moves near grasp"):
+What you asked for:
+- Send commands in "degrees" from 0..255
+  0   = fully open
+  255 = fully closed (as shown in your Wizard screenshot)
 
-1) It DOES NOT treat 0..255 as physical degrees.
-   Instead, it maps your policy command (normalized 0..1 or cmd255 0..255)
-   directly into a *tick range* [open_ticks .. close_ticks].
-
-2) It can automatically derive that tick range from the servo itself:
-   - Reads CW/CCW angle limits (ADDR 6, 8).
-   - If those limits are configured (not 0..1023), we use them as endpoints.
-     This often matches what the Teensy pipeline effectively enforces.
-
-3) It forces "stiff" settings that the Teensy often sets:
-   - Moving speed (ADDR 32) -> default max (0)
-   - Torque limit (ADDR 34) -> max (1023)
-   - Compliance margin/slope -> stiffer response (optional but enabled by default)
-   These are common reasons why a gripper feels weak or unresponsive near closing.
-
-4) It adds a small minimum tick step to overcome deadband/stiction under load.
-
-If this still doesn't match ROS perfectly, the next step is to *dump the Teensy-configured
-registers* (speed/torque/compliance/limits) and clone them. This file already covers the
-most common ones for AX.
+Important:
+- MX-106 uses 0..4095 ticks for ~0..360 degrees (not 0..1023 for 0..300 like AX)
+- This file converts degrees -> ticks correctly for MX using Resolution Divider.
 
 Requirements:
   pip install dynamixel-sdk pyserial
 """
 
+from __future__ import annotations
+
+import argparse
+import platform
 import time
-from typing import Optional, Tuple
+from dataclasses import dataclass
+from typing import Optional
 
 try:
     from dynamixel_sdk import PortHandler, PacketHandler, COMM_SUCCESS
@@ -40,47 +31,68 @@ except ImportError as e:
     raise ImportError(
         "dynamixel-sdk not installed. Install with:\n"
         "  pip install dynamixel-sdk pyserial\n"
-        "USB gripper mode requires dynamixel-sdk."
     ) from e
+
+
+# ---------------- Protocol 1.0 MX Control Table (common) ----------------
+ADDR_MODEL_NUMBER = 0            # 2 bytes
+ADDR_FIRMWARE_VERSION = 2        # 1 byte
+ADDR_ID = 3                      # 1 byte
+ADDR_BAUD_RATE = 4               # 1 byte
+ADDR_RETURN_DELAY = 5            # 1 byte
+
+ADDR_CW_ANGLE_LIMIT = 6          # 2 bytes
+ADDR_CCW_ANGLE_LIMIT = 8         # 2 bytes
+
+ADDR_RESOLUTION_DIVIDER = 22     # 1 byte (MX only)
+
+ADDR_TORQUE_ENABLE = 24          # 1 byte
+ADDR_GOAL_POSITION = 30          # 2 bytes
+ADDR_PRESENT_POSITION = 36       # 2 bytes
+
+# Optional (not required, but handy for debug)
+ADDR_MOVING_SPEED = 32           # 2 bytes
+ADDR_TORQUE_LIMIT = 34           # 2 bytes
+
+
+@dataclass
+class GripperState:
+    ok: bool
+    position: float                    # normalized [0..1] over 0..255 command space
+    cmd_deg: Optional[float] = None    # 0..255 command degrees (your desired interface)
+    angle_deg: Optional[float] = None  # actual servo angle in degrees (0..~360)
+    dxl_position: Optional[int] = None
+    cached: bool = False
+    error: Optional[str] = None
 
 
 class DynamixelUSBGripper:
     """
-    Direct USB control of an AX/Protocol 1.0 Dynamixel servo.
-    Provides the same shape as your GripperClient: set/get/ping/disconnect.
+    USB controller for MX-series Dynamixel in Protocol 1.0.
 
-    Public command interfaces:
-      - set(normalized: 0..1)
-      - set_degrees(cmd255: 0..255)  # Teensy-style
+    Public API:
+      - set_degrees(cmd_deg_0_to_255)  -> sends degrees (0..255) as you requested
+      - set(norm_0_to_1)              -> maps to 0..255 degrees then sends
+      - get()                         -> returns cmd_deg + actual angle_deg + ticks
+      - ping()
+      - disconnect()
+
+    Notes:
+      - Uses Resolution Divider to compute ticks-per-rev correctly.
+      - Clamps goal ticks to CW/CCW angle limits.
     """
-
-    # ---------------- AX / Protocol 1.0 Control Table ----------------
-    ADDR_CW_ANGLE_LIMIT = 6          # 2 bytes
-    ADDR_CCW_ANGLE_LIMIT = 8         # 2 bytes
-
-    ADDR_TORQUE_ENABLE = 24          # 1 byte
-
-    ADDR_CW_COMPLIANCE_MARGIN = 26   # 1 byte
-    ADDR_CCW_COMPLIANCE_MARGIN = 27  # 1 byte
-    ADDR_CW_COMPLIANCE_SLOPE = 28    # 1 byte
-    ADDR_CCW_COMPLIANCE_SLOPE = 29   # 1 byte
-
-    ADDR_GOAL_POSITION = 30          # 2 bytes
-    ADDR_MOVING_SPEED = 32           # 2 bytes
-    ADDR_TORQUE_LIMIT = 34           # 2 bytes
-    ADDR_PRESENT_POSITION = 36       # 2 bytes
-
-    ADDR_MOVING = 46                 # 1 byte (0=not moving, 1=moving)
 
     DXL_PROTOCOL_VERSION = 1.0
 
-    # Tick range for AX position mode
-    TICKS_MIN = 0
-    TICKS_MAX = 1023
+    # MX nominal full scale:
+    # - with resolution divider = 1: 4096 units per rev (0..4095)
+    # We'll compute this dynamically from Resolution Divider.
+    BASE_UNITS_PER_REV = 4096
+    BASE_FULL_SCALE_DEG = 360.0
 
-    # Teensy-style command range
-    CMD_MIN = 0.0
-    CMD_MAX = 255.0
+    # Your desired command domain
+    CMD_MIN_DEG = 0.0
+    CMD_MAX_DEG = 255.0
 
     def __init__(
         self,
@@ -88,115 +100,109 @@ class DynamixelUSBGripper:
         baudrate: int = 57600,
         dxl_id: int = 1,
         *,
-        # Preferred: explicitly set endpoints in ticks if you know them
-        open_ticks: Optional[int] = None,
-        close_ticks: Optional[int] = None,
-
-        # If endpoints aren't provided, try to use servo angle limits as endpoints
-        use_angle_limits_as_range: bool = True,
-
-        # If angle limits are default (0..1023) and ticks aren't provided, fallback endpoints:
-        fallback_open_ticks: int = 0,
-        fallback_close_ticks: int = 650,  # conservative close; avoids hitting hard stop
-
-        # Optional inversion (swap meaning of "open" and "close")
+        # If direction is flipped, set this True
         invert: bool = False,
-
-        # Make USB behave like a "stiff" gripper (common Teensy setup)
-        set_max_torque_limit: bool = True,
-        torque_limit: int = 1023,          # 0..1023 (AX)
-        set_max_speed: bool = True,
-        moving_speed: int = 0,             # AX: 0 often means "max"
-        set_stiff_compliance: bool = True,
-        compliance_margin: int = 0,        # smaller = tighter
-        compliance_slope: int = 32,         # valid typical: 2,4,8,16,32,64,128
-
-        # Helps when near-grasp commands are tiny and get swallowed by deadband
-        min_step_ticks: int = 3,
-
-        # Optional verification (slower but can help debugging)
-        verify_move: bool = False,
-        verify_timeout_s: float = 0.25,
-        verify_tol_ticks: int = 6,
+        # Small delay after writes (some USB adapters/servos behave better)
+        post_write_sleep_s: float = 0.00,
+        # Print register snapshot on connect
+        verbose: bool = True,
     ):
         self.port_name = str(port)
         self.baudrate = int(baudrate)
         self.dxl_id = int(dxl_id)
+        self.invert = bool(invert)
+        self.post_write_sleep_s = float(post_write_sleep_s)
+        self.verbose = bool(verbose)
 
         self.port_handler = PortHandler(self.port_name)
         self.packet_handler = PacketHandler(self.DXL_PROTOCOL_VERSION)
 
         self._is_connected = False
 
-        self.open_ticks_cfg = open_ticks
-        self.close_ticks_cfg = close_ticks
-        self.use_angle_limits_as_range = bool(use_angle_limits_as_range)
-        self.fallback_open_ticks = int(fallback_open_ticks)
-        self.fallback_close_ticks = int(fallback_close_ticks)
-        self.invert = bool(invert)
-
-        self.set_max_torque_limit = bool(set_max_torque_limit)
-        self.torque_limit = int(torque_limit)
-        self.set_max_speed = bool(set_max_speed)
-        self.moving_speed = int(moving_speed)
-
-        self.set_stiff_compliance = bool(set_stiff_compliance)
-        self.compliance_margin = int(compliance_margin)
-        self.compliance_slope = int(compliance_slope)
-
-        self.min_step_ticks = int(min_step_ticks)
-
-        self.verify_move = bool(verify_move)
-        self.verify_timeout_s = float(verify_timeout_s)
-        self.verify_tol_ticks = int(verify_tol_ticks)
+        # Resolved at connect()
+        self.model_number: Optional[int] = None
+        self.resolution_divider: int = 1
+        self.units_per_rev: int = self.BASE_UNITS_PER_REV
+        self.ticks_max: int = self.units_per_rev - 1
+        self.cw_limit: int = 0
+        self.ccw_limit: int = self.ticks_max
 
         self._last_norm = 0.0
-        self._last_target_ticks: Optional[int] = None
 
-        # Resolved endpoints (ticks)
-        self._open_ticks: Optional[int] = None
-        self._close_ticks: Optional[int] = None
-
-    # ---------------- Low-level helpers ----------------
+    # ---------------- low-level IO ----------------
     def _w1(self, addr: int, val: int) -> None:
-        dxl_comm_result, dxl_error = self.packet_handler.write1ByteTxRx(
-            self.port_handler, self.dxl_id, addr, int(val)
-        )
-        if dxl_comm_result != COMM_SUCCESS:
-            raise RuntimeError(self.packet_handler.getTxRxResult(dxl_comm_result))
-        if dxl_error != 0:
-            raise RuntimeError(self.packet_handler.getRxPacketError(dxl_error))
+        comm, err = self.packet_handler.write1ByteTxRx(self.port_handler, self.dxl_id, addr, int(val))
+        if comm != COMM_SUCCESS:
+            raise RuntimeError(self.packet_handler.getTxRxResult(comm))
+        if err != 0:
+            raise RuntimeError(self.packet_handler.getRxPacketError(err))
 
     def _w2(self, addr: int, val: int) -> None:
-        dxl_comm_result, dxl_error = self.packet_handler.write2ByteTxRx(
-            self.port_handler, self.dxl_id, addr, int(val)
-        )
-        if dxl_comm_result != COMM_SUCCESS:
-            raise RuntimeError(self.packet_handler.getTxRxResult(dxl_comm_result))
-        if dxl_error != 0:
-            raise RuntimeError(self.packet_handler.getRxPacketError(dxl_error))
+        comm, err = self.packet_handler.write2ByteTxRx(self.port_handler, self.dxl_id, addr, int(val))
+        if comm != COMM_SUCCESS:
+            raise RuntimeError(self.packet_handler.getTxRxResult(comm))
+        if err != 0:
+            raise RuntimeError(self.packet_handler.getRxPacketError(err))
 
     def _r1(self, addr: int) -> int:
-        val, dxl_comm_result, dxl_error = self.packet_handler.read1ByteTxRx(
-            self.port_handler, self.dxl_id, addr
-        )
-        if dxl_comm_result != COMM_SUCCESS:
-            raise RuntimeError(self.packet_handler.getTxRxResult(dxl_comm_result))
-        if dxl_error != 0:
-            raise RuntimeError(self.packet_handler.getRxPacketError(dxl_error))
+        val, comm, err = self.packet_handler.read1ByteTxRx(self.port_handler, self.dxl_id, addr)
+        if comm != COMM_SUCCESS:
+            raise RuntimeError(self.packet_handler.getTxRxResult(comm))
+        if err != 0:
+            raise RuntimeError(self.packet_handler.getRxPacketError(err))
         return int(val)
 
     def _r2(self, addr: int) -> int:
-        val, dxl_comm_result, dxl_error = self.packet_handler.read2ByteTxRx(
-            self.port_handler, self.dxl_id, addr
-        )
-        if dxl_comm_result != COMM_SUCCESS:
-            raise RuntimeError(self.packet_handler.getTxRxResult(dxl_comm_result))
-        if dxl_error != 0:
-            raise RuntimeError(self.packet_handler.getRxPacketError(dxl_error))
+        val, comm, err = self.packet_handler.read2ByteTxRx(self.port_handler, self.dxl_id, addr)
+        if comm != COMM_SUCCESS:
+            raise RuntimeError(self.packet_handler.getTxRxResult(comm))
+        if err != 0:
+            raise RuntimeError(self.packet_handler.getRxPacketError(err))
         return int(val)
 
-    # ---------------- Connection ----------------
+    # ---------------- conversion ----------------
+    def _clamp_cmd_deg(self, deg: float) -> float:
+        return max(self.CMD_MIN_DEG, min(self.CMD_MAX_DEG, float(deg)))
+
+    def _cmd_deg_to_norm(self, deg: float) -> float:
+        d = self._clamp_cmd_deg(deg)
+        return (d - self.CMD_MIN_DEG) / (self.CMD_MAX_DEG - self.CMD_MIN_DEG)
+
+    def _norm_to_cmd_deg(self, n: float) -> float:
+        n = max(0.0, min(1.0, float(n)))
+        return self.CMD_MIN_DEG + n * (self.CMD_MAX_DEG - self.CMD_MIN_DEG)
+
+    def _deg_to_ticks(self, deg: float) -> int:
+        """
+        Convert *actual servo degrees* (0..360) to ticks (0..ticks_max),
+        then clamp to CW/CCW limits.
+        """
+        d = float(deg)
+
+        # Optional invert (swap direction)
+        if self.invert:
+            d = self.BASE_FULL_SCALE_DEG - d
+
+        # Clamp to [0..360]
+        d = max(0.0, min(self.BASE_FULL_SCALE_DEG, d))
+
+        # Convert degrees -> ticks (using computed ticks_max)
+        ticks = int(round((d / self.BASE_FULL_SCALE_DEG) * self.ticks_max))
+
+        # Clamp within configured limits (joint mode)
+        lo = min(self.cw_limit, self.ccw_limit)
+        hi = max(self.cw_limit, self.ccw_limit)
+        ticks = max(lo, min(hi, ticks))
+        return ticks
+
+    def _ticks_to_deg(self, ticks: int) -> float:
+        t = max(0, min(self.ticks_max, int(ticks)))
+        deg = (t / float(self.ticks_max)) * self.BASE_FULL_SCALE_DEG
+        if self.invert:
+            deg = self.BASE_FULL_SCALE_DEG - deg
+        return deg
+
+    # ---------------- connection ----------------
     def connect(self) -> None:
         if self._is_connected:
             try:
@@ -206,7 +212,7 @@ class DynamixelUSBGripper:
                 pass
             self._is_connected = False
 
-        # Close if needed
+        # best-effort close
         try:
             if hasattr(self.port_handler, "is_open") and self.port_handler.is_open:
                 self.port_handler.closePort()
@@ -215,7 +221,6 @@ class DynamixelUSBGripper:
 
         time.sleep(0.05)
 
-        # Open (retry once)
         if not self.port_handler.openPort():
             time.sleep(0.15)
             self.port_handler = PortHandler(self.port_name)
@@ -229,178 +234,98 @@ class DynamixelUSBGripper:
                 pass
             raise RuntimeError(f"Failed to set baudrate {self.baudrate} on {self.port_name}")
 
-        # Torque enable
-        self._w1(self.ADDR_TORQUE_ENABLE, 1)
+        # Verify comms via ping (and read model)
+        ping = self.ping()
+        if not ping.get("ok"):
+            raise RuntimeError(f"Ping failed: {ping}")
 
-        # Apply "stiff" config (common difference vs Teensy)
-        self._apply_profile()
+        # Read model + resolution divider (MX)
+        self.model_number = self._r2(ADDR_MODEL_NUMBER)
+        fw = self._r1(ADDR_FIRMWARE_VERSION)
 
-        # Resolve tick range endpoints
-        self._resolve_tick_range()
+        # Resolution Divider exists on MX; if read fails, we’ll default to 1
+        try:
+            div = self._r1(ADDR_RESOLUTION_DIVIDER)
+            if div <= 0:
+                div = 1
+            self.resolution_divider = int(div)
+        except Exception:
+            self.resolution_divider = 1
+
+        # Compute units/ticks
+        # units_per_rev = 4096 / divider (divider=1 => 4096, divider=2 => 2048, etc.)
+        upr = int(self.BASE_UNITS_PER_REV // self.resolution_divider)
+        if upr <= 0:
+            upr = self.BASE_UNITS_PER_REV
+        self.units_per_rev = upr
+        self.ticks_max = self.units_per_rev - 1
+
+        # Angle limits (joint mode)
+        self.cw_limit = self._r2(ADDR_CW_ANGLE_LIMIT)
+        self.ccw_limit = self._r2(ADDR_CCW_ANGLE_LIMIT)
+
+        # Wheel mode check
+        if self.cw_limit == 0 and self.ccw_limit == 0:
+            raise RuntimeError(
+                "Servo is in WHEEL mode (CW=0, CCW=0). It will NOT respond to GOAL_POSITION.\n"
+                "In Dynamixel Wizard, set it back to Joint mode by setting CCW Angle Limit > 0."
+            )
+
+        # Ensure torque on
+        self._w1(ADDR_TORQUE_ENABLE, 1)
 
         self._is_connected = True
         time.sleep(0.05)
-        print(
-            f"[DynamixelUSB] Connected id={self.dxl_id} port={self.port_name} baud={self.baudrate} "
-            f"range=open:{self._open_ticks} close:{self._close_ticks} invert={self.invert}"
-        )
 
-    def _apply_profile(self) -> None:
-        # Note: all best-effort; some servos / configs may reject writes under load.
-        # We still raise if a write fails, because silent misconfig = confusing behaviour.
-        if self.set_max_speed:
-            # AX: moving_speed 0 often means max speed
-            self._w2(self.ADDR_MOVING_SPEED, max(0, min(1023, self.moving_speed)))
+        if self.verbose:
+            try:
+                spd = self._r2(ADDR_MOVING_SPEED)
+                tl = self._r2(ADDR_TORQUE_LIMIT)
+            except Exception:
+                spd, tl = None, None
 
-        if self.set_max_torque_limit:
-            self._w2(self.ADDR_TORQUE_LIMIT, max(0, min(1023, self.torque_limit)))
-
-        if self.set_stiff_compliance:
-            # Keep response tight
-            m = max(0, min(255, self.compliance_margin))
-            s = max(0, min(255, self.compliance_slope))
-            self._w1(self.ADDR_CW_COMPLIANCE_MARGIN, m)
-            self._w1(self.ADDR_CCW_COMPLIANCE_MARGIN, m)
-            self._w1(self.ADDR_CW_COMPLIANCE_SLOPE, s)
-            self._w1(self.ADDR_CCW_COMPLIANCE_SLOPE, s)
+            print(
+                f"[DynamixelUSB] Connected port={self.port_name} baud={self.baudrate} id={self.dxl_id}\n"
+                f"  model={self.model_number} fw={fw} protocol=1.0\n"
+                f"  resolution_divider={self.resolution_divider} units_per_rev={self.units_per_rev} ticks_max={self.ticks_max}\n"
+                f"  CW_limit={self.cw_limit} CCW_limit={self.ccw_limit} invert={self.invert}\n"
+                f"  moving_speed={spd} torque_limit={tl}"
+            )
 
     def disconnect(self) -> None:
         if self._is_connected:
             try:
                 if hasattr(self.port_handler, "is_open") and self.port_handler.is_open:
                     try:
-                        self._w1(self.ADDR_TORQUE_ENABLE, 0)
+                        self._w1(ADDR_TORQUE_ENABLE, 0)
                     except Exception:
                         pass
             except Exception:
                 pass
 
-        for _ in range(3):
-            try:
-                if hasattr(self.port_handler, "is_open"):
-                    if self.port_handler.is_open:
-                        self.port_handler.closePort()
-                    if not self.port_handler.is_open:
-                        break
-                else:
-                    break
-            except Exception:
-                time.sleep(0.05)
+        try:
+            if hasattr(self.port_handler, "is_open") and self.port_handler.is_open:
+                self.port_handler.closePort()
+        except Exception:
+            pass
 
         self._is_connected = False
-        print(f"[DynamixelUSB] Disconnected port={self.port_name}")
+        if self.verbose:
+            print(f"[DynamixelUSB] Disconnected port={self.port_name}")
 
-    # ---------------- Range resolution ----------------
-    def _resolve_tick_range(self) -> None:
-        # 1) If user provided endpoints, use them
-        if self.open_ticks_cfg is not None and self.close_ticks_cfg is not None:
-            o = int(self.open_ticks_cfg)
-            c = int(self.close_ticks_cfg)
-            self._open_ticks, self._close_ticks = self._sanitize_range(o, c)
-            return
-
-        # 2) Try to use servo CW/CCW limits as endpoints (often matches Teensy behaviour)
-        if self.use_angle_limits_as_range:
-            cw = self._r2(self.ADDR_CW_ANGLE_LIMIT)
-            ccw = self._r2(self.ADDR_CCW_ANGLE_LIMIT)
-
-            # Wheel mode check (both 0 in many AX configs)
-            if cw == 0 and ccw == 0:
-                raise RuntimeError(
-                    "Servo appears to be in WHEEL mode (CW=0, CCW=0). "
-                    "Position control won't behave as expected. "
-                    "If ROS works, this suggests your USB path is not talking to the same config/servo."
-                )
-
-            # If limits aren't the full default range, treat them as calibrated endpoints
-            if not (cw == 0 and ccw == 1023):
-                self._open_ticks, self._close_ticks = self._sanitize_range(cw, ccw)
-                return
-
-        # 3) Fallback to conservative endpoints
-        self._open_ticks, self._close_ticks = self._sanitize_range(
-            self.fallback_open_ticks, self.fallback_close_ticks
-        )
-
-    def _sanitize_range(self, open_ticks: int, close_ticks: int) -> Tuple[int, int]:
-        o = max(self.TICKS_MIN, min(self.TICKS_MAX, int(open_ticks)))
-        c = max(self.TICKS_MIN, min(self.TICKS_MAX, int(close_ticks)))
-        if o == c:
-            # Expand slightly to avoid divide-by-zero and "no motion"
-            c = max(self.TICKS_MIN, min(self.TICKS_MAX, o + 10))
-        return o, c
-
-    # ---------------- Mapping ----------------
-    def _norm_to_ticks(self, normalized: float) -> int:
-        n = max(0.0, min(1.0, float(normalized)))
-        o, c = self._open_ticks, self._close_ticks
-        assert o is not None and c is not None
-
-        if self.invert:
-            n = 1.0 - n
-
-        ticks = int(round(o + n * (c - o)))
-        return max(self.TICKS_MIN, min(self.TICKS_MAX, ticks))
-
-    def _ticks_to_norm(self, ticks: int) -> float:
-        t = max(self.TICKS_MIN, min(self.TICKS_MAX, int(ticks)))
-        o, c = self._open_ticks, self._close_ticks
-        assert o is not None and c is not None
-
-        # Avoid division by zero
-        if c == o:
-            return 0.0
-
-        n = (t - o) / float(c - o)
-        n = max(0.0, min(1.0, n))
-        if self.invert:
-            n = 1.0 - n
-        return n
-
-    def _cmd255_to_norm(self, cmd255: float) -> float:
-        c = max(self.CMD_MIN, min(self.CMD_MAX, float(cmd255)))
-        return (c - self.CMD_MIN) / (self.CMD_MAX - self.CMD_MIN)
-
-    # ---------------- Motion helpers ----------------
-    def _apply_min_step(self, target_ticks: int) -> int:
-        if self._last_target_ticks is None:
-            return target_ticks
-
-        dt = target_ticks - self._last_target_ticks
-        if abs(dt) < self.min_step_ticks:
-            if dt == 0:
-                return target_ticks
-            bump = self.min_step_ticks if dt > 0 else -self.min_step_ticks
-            target_ticks = self._last_target_ticks + bump
-            target_ticks = max(self.TICKS_MIN, min(self.TICKS_MAX, target_ticks))
-        return target_ticks
-
-    def _wait_reached(self, target_ticks: int, timeout_s: float, tol_ticks: int) -> None:
-        start = time.time()
-        while (time.time() - start) < timeout_s:
-            try:
-                cur = self._r2(self.ADDR_PRESENT_POSITION)
-                if abs(cur - target_ticks) <= tol_ticks:
-                    return
-            except Exception:
-                pass
-            time.sleep(0.01)
-
-    # ---------------- Public API ----------------
+    # ---------------- public API ----------------
     def ping(self, max_retries: int = 2) -> dict:
-        if not self._is_connected:
-            self.connect()
-
         last_error = None
         for attempt in range(int(max_retries)):
             try:
-                model, comm_result, err = self.packet_handler.ping(self.port_handler, self.dxl_id)
-                if comm_result == COMM_SUCCESS and err == 0:
+                model, comm, err = self.packet_handler.ping(self.port_handler, self.dxl_id)
+                if comm == COMM_SUCCESS and err == 0:
                     return {"ok": True, "model": int(model)}
-                if comm_result != COMM_SUCCESS:
-                    last_error = self.packet_handler.getTxRxResult(comm_result)
-                else:
-                    last_error = self.packet_handler.getRxPacketError(err)
+                last_error = (
+                    self.packet_handler.getTxRxResult(comm)
+                    if comm != COMM_SUCCESS
+                    else self.packet_handler.getRxPacketError(err)
+                )
             except Exception as e:
                 last_error = str(e)
 
@@ -409,56 +334,73 @@ class DynamixelUSBGripper:
 
         return {"ok": False, "error": last_error or "Unknown error"}
 
-    def set(self, normalized_value: float, max_retries: int = 2) -> dict:
+    def set_degrees(self, cmd_deg_0_to_255: float) -> dict:
+        """
+        The function you want:
+          send degrees in [0..255] where
+            0   = open
+            255 = closed
+        """
         if not self._is_connected:
             self.connect()
 
+        cmd_deg = self._clamp_cmd_deg(cmd_deg_0_to_255)
+
+        # IMPORTANT: cmd_deg is interpreted as *actual servo degrees* (0..255 out of 0..360)
+        ticks = self._deg_to_ticks(cmd_deg)
+        self._w2(ADDR_GOAL_POSITION, ticks)
+
+        if self.post_write_sleep_s > 0:
+            time.sleep(self.post_write_sleep_s)
+
+        norm = self._cmd_deg_to_norm(cmd_deg)
+        self._last_norm = norm
+        return {"ok": True, "position": norm, "cmd_deg": cmd_deg, "dxl_position": ticks}
+
+    def set(self, normalized_value: float) -> dict:
+        """
+        Compatibility with your existing tests:
+        normalized 0..1 -> command degrees 0..255 -> send.
+        """
         n = max(0.0, min(1.0, float(normalized_value)))
-        target_ticks = self._norm_to_ticks(n)
-        target_ticks = self._apply_min_step(target_ticks)
-
-        last_error = None
-        for attempt in range(int(max_retries)):
-            try:
-                self._w2(self.ADDR_GOAL_POSITION, target_ticks)
-                self._last_target_ticks = target_ticks
-                self._last_norm = n
-
-                if self.verify_move:
-                    self._wait_reached(target_ticks, self.verify_timeout_s, self.verify_tol_ticks)
-
-                return {"ok": True, "position": n, "dxl_position": target_ticks}
-            except Exception as e:
-                last_error = str(e)
-                if attempt < int(max_retries) - 1:
-                    time.sleep(0.02)
-
-        raise RuntimeError(f"Failed to set() after {max_retries} attempts: {last_error}")
-
-    def set_degrees(self, cmd255: float, max_retries: int = 2) -> dict:
-        # cmd255 is Teensy-style 0..255, but we treat it as a normalized command.
-        n = self._cmd255_to_norm(cmd255)
-        out = self.set(n, max_retries=max_retries)
-        out["cmd255"] = float(max(self.CMD_MIN, min(self.CMD_MAX, float(cmd255))))
+        cmd_deg = self._norm_to_cmd_deg(n)
+        out = self.set_degrees(cmd_deg)
+        out["position"] = n
         return out
 
-    def get(self, max_retries: int = 3) -> dict:
+    def get(self, max_retries: int = 2) -> dict:
         if not self._is_connected:
             self.connect()
 
         last_error = None
         for attempt in range(int(max_retries)):
             try:
-                ticks = self._r2(self.ADDR_PRESENT_POSITION)
-                n = self._ticks_to_norm(ticks)
-                self._last_norm = n
-                return {"ok": True, "position": n, "dxl_position": ticks}
+                ticks = self._r2(ADDR_PRESENT_POSITION)
+                angle_deg = self._ticks_to_deg(ticks)
+
+                # Convert the *measured* servo angle (0..360) into your command space (0..255)
+                cmd_deg = max(self.CMD_MIN_DEG, min(self.CMD_MAX_DEG, angle_deg))
+                norm = self._cmd_deg_to_norm(cmd_deg)
+
+                self._last_norm = norm
+                return {
+                    "ok": True,
+                    "position": norm,
+                    "cmd_deg": cmd_deg,
+                    "angle_deg": angle_deg,
+                    "dxl_position": ticks,
+                }
             except Exception as e:
                 last_error = str(e)
                 if attempt < int(max_retries) - 1:
-                    time.sleep(0.03 * (attempt + 1))
+                    time.sleep(0.05 * (attempt + 1))
 
-        return {"ok": False, "position": self._last_norm, "cached": True, "error": last_error}
+        return {
+            "ok": False,
+            "position": self._last_norm,
+            "cached": True,
+            "error": last_error,
+        }
 
     def __enter__(self):
         self.connect()
@@ -470,23 +412,94 @@ class DynamixelUSBGripper:
 
 class GripperUSBClient:
     """
-    Wrapper matching your existing GripperClient interface.
+    Wrapper matching your existing 'client' shape.
     """
 
-    def __init__(self, port: str = "/dev/ttyUSB0", **kwargs):
-        self._gripper = DynamixelUSBGripper(port=port, **kwargs)
+    def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 57600, dxl_id: int = 1, **kwargs):
+        self._gripper = DynamixelUSBGripper(port=port, baudrate=baudrate, dxl_id=dxl_id, **kwargs)
 
     def set(self, value: float) -> dict:
         return self._gripper.set(value)
 
-    def set_degrees(self, cmd255: float) -> dict:
-        return self._gripper.set_degrees(cmd255)
+    def set_degrees(self, deg_command: float) -> dict:
+        return self._gripper.set_degrees(deg_command)
 
     def get(self) -> dict:
         return self._gripper.get()
 
     def ping(self) -> dict:
+        if not self._gripper._is_connected:
+            self._gripper.connect()
         return self._gripper.ping()
 
     def disconnect(self):
         self._gripper.disconnect()
+
+
+# ---------------- CLI (optional quick test) ----------------
+def _default_port() -> str:
+    if platform.system() == "Windows":
+        return "COM3"
+    return "/dev/ttyUSB0"
+
+
+def main():
+    ap = argparse.ArgumentParser(description="MX-106 USB gripper control: 0..255 degrees (0 open, 255 closed)")
+    ap.add_argument("--port", default=_default_port())
+    ap.add_argument("--baudrate", type=int, default=57600)
+    ap.add_argument("--id", type=int, default=1)
+    ap.add_argument("--invert", action="store_true")
+    ap.add_argument("--quiet", action="store_true")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("ping")
+    sub.add_parser("get")
+
+    p_sd = sub.add_parser("set-deg")
+    p_sd.add_argument("--deg", type=float, required=True, help="0..255 degrees (0 open, 255 closed)")
+
+    p_s = sub.add_parser("set")
+    p_s.add_argument("--norm", type=float, required=True, help="0..1 (mapped to 0..255 degrees)")
+
+    p_sw = sub.add_parser("sweep")
+    p_sw.add_argument("--delay", type=float, default=0.7)
+    p_sw.add_argument("--deg-list", type=float, nargs="+", default=[0, 255, 0])
+
+    args = ap.parse_args()
+
+    g = DynamixelUSBGripper(
+        port=args.port,
+        baudrate=args.baudrate,
+        dxl_id=args.id,
+        invert=args.invert,
+        verbose=not args.quiet,
+    )
+
+    try:
+        if args.cmd == "ping":
+            g.connect()
+            print(g.ping())
+        elif args.cmd == "get":
+            print(g.get())
+        elif args.cmd == "set-deg":
+            print(g.set_degrees(args.deg))
+        elif args.cmd == "set":
+            print(g.set(args.norm))
+        elif args.cmd == "sweep":
+            print(g.get())
+            for d in args.deg_list:
+                out = g.set_degrees(d)
+                time.sleep(args.delay)
+                meas = g.get()
+                print({"cmd": out, "meas": meas})
+        else:
+            raise RuntimeError("Unknown command")
+    finally:
+        try:
+            g.disconnect()
+        except Exception:
+            pass
+
+
+if __name__ == "__main__":
+    main()
