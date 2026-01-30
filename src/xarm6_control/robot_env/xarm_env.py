@@ -230,6 +230,7 @@ class XArmRealEnv:
         if self.gripper_mode.lower() == "usb":
             # Match ROS scaling: normalized 0..1 -> degrees 0..255 (Int16 in ROS path),
             # then map into USB gripper's [min_angle, max_angle] range.
+            raw_gripper_action = float(np.clip(action[-1], 0.0, 1.0))
             deg_cmd = int(round(raw_gripper_action * 255.0))
             gripper_action = None
         else:
