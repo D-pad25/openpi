@@ -226,7 +226,24 @@ class XArmRealEnv:
         # Clip joint angles to physical joint limits
         # joint_action = np.clip(action[:6], JOINT_LIMITS["lower"], JOINT_LIMITS["upper"])
         joint_action = action[:6]
-        gripper_action = np.clip(action[-1], 0, 1)
+        raw_gripper_action = float(action[-1])
+        if self.gripper_mode.lower() == "usb":
+            # Match ROS scaling: normalized 0..1 -> degrees 0..255 (Int16 in ROS path),
+            # then map into USB gripper's [min_angle, max_angle] range.
+            deg_cmd = int(round(raw_gripper_action * 255.0))
+            min_angle = 5.0
+            max_angle = 179.0
+            usb_impl = getattr(self.gripper, "_gripper", None)
+            if usb_impl is not None:
+                min_angle = getattr(usb_impl, "min_angle", min_angle)
+                max_angle = getattr(usb_impl, "max_angle", max_angle)
+            if max_angle > min_angle:
+                scaled = (deg_cmd - min_angle) / (max_angle - min_angle)
+            else:
+                scaled = 0.0
+            gripper_action = np.clip(scaled, 0, 1)
+        else:
+            gripper_action = np.clip(raw_gripper_action, 0, 1)
 
 
         # Convert to degrees for printing
@@ -239,11 +256,18 @@ class XArmRealEnv:
         self._gripper_debug_step += 1
         debug_hit = self._gripper_debug and (self._gripper_debug_step % self._gripper_debug_every == 0)
         if debug_hit:
-            raw = float(action[-1])
-            print(
-                f"[GRIPPER][DEBUG] step={self._gripper_debug_step} "
-                f"mode={self.gripper_mode} raw={raw:.4f} clipped={gripper_action:.4f}"
-            )
+            if self.gripper_mode.lower() == "usb":
+                print(
+                    f"[GRIPPER][DEBUG] step={self._gripper_debug_step} "
+                    f"mode={self.gripper_mode} raw={raw_gripper_action:.4f} "
+                    f"deg_cmd={deg_cmd} clipped={gripper_action:.4f}"
+                )
+            else:
+                print(
+                    f"[GRIPPER][DEBUG] step={self._gripper_debug_step} "
+                    f"mode={self.gripper_mode} raw={raw_gripper_action:.4f} "
+                    f"clipped={gripper_action:.4f}"
+                )
         try:
             resp = self.gripper.set(gripper_action)
             if debug_hit:
