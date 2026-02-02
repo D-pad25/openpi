@@ -20,6 +20,7 @@ from xarm6_control.sensors.transforms.resize_pkl import resize_with_pad_custom
 import datetime
 import os
 import csv
+import rerun as rr
 
 class MockCamera:
     def read(self, img_size=None):
@@ -253,6 +254,7 @@ def main(
                     raise
 
             action = action_chunk[actions_from_chunk_completed]
+            rr.log(f"/xarm6/joint_positions", action[:6])
             actions_from_chunk_completed += 1
 
             # Convert joint positions and compute delta (in degrees)

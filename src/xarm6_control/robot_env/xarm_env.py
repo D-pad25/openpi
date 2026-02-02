@@ -12,82 +12,10 @@ import asyncio
 import json
 from xarm6_control.hardware.gripper.client_async import GripperClient
 from xarm6_control.hardware.gripper.dynamixel_usb import GripperUSBClient
-# from dummy_gripper import GripperClientAsync
+import rerun as rr
+import roboticstoolbox as rtb
+from xarm6_control.scripts.rerun_helper import ReRunRobot
 
-'''
-class GripperClient:
-    def __init__(self, host='127.0.0.1', port=22345):
-        self.host = host
-        self.send_gripper_port = port
-        self.sock = None
-
-    def connect(self):
-        if self.sock is None:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.connect((self.host, self.send_gripper_port))
-            # print("[Client] Connected to gripper server")
-
-    def close(self):
-        if self.sock:
-            self.sock.close()
-            self.sock = None
-            # print("[Client] Disconnected")
-
-    def send_command(self, message: str) -> str:
-        """Send raw command and get response."""
-        try:
-            self.connect()
-            self.sock.sendall(f"{message.strip()}\n".encode())
-            response = self.sock.recv(1024).decode().strip()
-            return response
-        except Exception as e:
-            print(f"[Client Error] {e}")
-            return "ERROR"
-
-    def send_gripper_command(self, value: float):
-        response = self.send_command(f"SET:{value:.3f}")
-        # print(f"[Client] Sent gripper command: {value:.3f} | Server: {response}")
-
-    def receive_gripper_position(self):
-        response = self.send_command("GET")
-        # print(f"[Client] Gripper state: {response}")
-        return response
-'''
-class GripperClientAsync_old:
-    def __init__(self, host='127.0.0.1', port=22345):
-        self.host = host
-        self.port = port
-        self.reader = None
-        self.writer = None
-
-    async def connect(self):
-        if self.reader is None or self.writer is None:
-            self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
-            print("[Client] Connected to gripper server")
-
-    async def disconnect(self):
-        if self.writer:
-            self.writer.close()
-            await self.writer.wait_closed()
-            print("[Client] Disconnected")
-            self.reader = self.writer = None
-
-    async def send_gripper_command(self, cmd_type: str, payload=None):
-        await self.connect()
-        message = json.dumps({"cmd": cmd_type, "value": payload})
-        self.writer.write((message + "\n").encode())
-        await self.writer.drain()
-
-        response = await self.reader.readline()
-        return json.loads(response.decode())
-
-    async def set_gripper(self, value: float):
-        assert 0.0 <= value <= 1.0, "Gripper value must be between 0.0 and 1.0"
-        return await self.send_gripper_command("SET", round(value, 3))
-
-    async def receive_gripper_position(self):
-        return await self.send_gripper_command("GET")
-    
 class XArmRealEnv:
     def __init__(
         self,
@@ -97,6 +25,8 @@ class XArmRealEnv:
         gripper_usb_port: str = "/dev/ttyUSB0",  # For USB mode
         gripper_host: str = "127.0.0.1",  # For ROS mode
         gripper_port: int = 22345,  # For ROS mode
+        spawn_rerun: bool = True,
+        use_rerun: bool = True,
     ):
         """
         Initialize xArm environment.
@@ -134,6 +64,27 @@ class XArmRealEnv:
         print("Gripper client initialized.")
         self.camera_dict = camera_dict or {}
 
+        # Initialize Rerun robot
+        self.use_rerun = use_rerun
+        self._last_action = None
+
+        if self.use_rerun:
+            self._rr_step = 0
+            self._rr_robot = rtb.robot.ERobot.URDF(
+                "/home/qcrvgs/diffusion_pytorch/asset/xarm6.urdf"
+            )
+            rr.init("urdf_xarm6", recording_id="xarm6", spawn=spawn_rerun)
+
+            # World / view coordinates (pick one convention and stick to it)
+            rr.log(f"/{self._rr_robot.name}", rr.ViewCoordinates.RIGHT_HAND_Z_UP, static=True)
+
+            self.rerun_robot = ReRunRobot(self._rr_robot, "xarm6")
+
+            # Log an initial state
+            q0 = np.array(self._get_joint_position()[:6], dtype=np.float64)
+            self.rerun_robot.log_robot_state(q0)
+
+
     def _initialize_arm(self):
         self.arm.clean_error()
         self.arm.clean_warn()
@@ -141,18 +92,6 @@ class XArmRealEnv:
         self.arm.set_mode(1)
         self.arm.set_collision_sensitivity(0)
         self.arm.set_state(state=0)
-
-    '''
-    def _get_normalized_gripper_position(self) -> float:
-        """Returns the gripper position as a normalized float in [0.0, 1.0]."""
-        raw_response = self.gripper.receive_gripper_position()
-        # print(f"[DEBUG] Raw gripper response: '{raw_response}'")
-        try:
-            return max(0.0, min(1.0, float(raw_response) / 255.0))  # Normalize to [0, 1]
-        except Exception:
-            print(f"[WARN] Failed to parse gripper state: '{raw_response}'")
-            return 0.0
-    '''
 
     def _get_normalized_gripper_position(self) -> float:
         try:
@@ -162,8 +101,6 @@ class XArmRealEnv:
         except Exception as e:
             print(f"[WARN] Failed to parse gripper state: {e}")
             return 0.0
-
-
 
     def _get_joint_position(self):
         code, joint_position = self.arm.get_servo_angle(is_radian=True)
@@ -193,6 +130,8 @@ class XArmRealEnv:
             obs[f"{name}_rgb"] = image
             obs[f"{name}_depth"] = depth
         # print("[DEBUG] Camera images read successfully.")
+        if self.use_rerun:
+            self._rerun_log(obs=obs, action=self._last_action, target_joints=self._last_action[:6] if self._last_action is not None else None)
         return obs
     
     def get_frames(self):
@@ -271,6 +210,7 @@ class XArmRealEnv:
                 print(f"[GRIPPER][DEBUG] set() error: {type(e).__name__}: {e}")
             raise
         # self.arm.set_gripper_position(gripper_mm, wait=False)
+        self._last_action = action
     
     def step_through_interpolated_trajectory(self,
         trajectory, obs, step_idx, log_dir, control_hz, step_through_instructions, save
@@ -327,7 +267,41 @@ class XArmRealEnv:
         file_path = os.path.join(log_dir, file_name)
         with open(file_path, "wb") as f:
             pickle.dump(data, f)
+    
+    def _rerun_log(self, obs=None, action=None, target_joints=None):
+        if not self.use_rerun:
+            return
 
+        # time axis for scrubbing
+        rr.set_time_sequence("step", self._rr_step)
+        self._rr_step += 1
+
+        # Prefer logging measured state (obs) over commanded state (action)
+        if obs is not None:
+            q = np.array(obs["joint_position"][:6], dtype=np.float64)
+            self.rerun_robot.log_robot_state(q)
+            rr.log(f"{self.rerun_robot.name}/gripper", rr.Scalar(float(obs["gripper_position"][0])))
+
+            # camera frames
+            for name in self.camera_dict.keys():
+                rgb_key = f"{name}_rgb"
+                depth_key = f"{name}_depth"
+                if rgb_key in obs:
+                    self.rerun_robot.log_frame(obs[rgb_key], f"cameras/{name}/rgb")
+                if depth_key in obs:
+                    # Depth can be float32; Rerun supports it, but you may want a DepthImage later.
+                    self.rerun_robot.log_frame(obs[depth_key], f"cameras/{name}/depth")
+
+        # Optional: log the commanded joint action as a pose target
+        if target_joints is not None:
+            self.rerun_robot.log_target_pose(np.array(target_joints, dtype=np.float64))
+
+        # Optional: log action scalars too
+        if action is not None:
+            rr.log(f"{self.rerun_robot.name}/cmd/joints", rr.Scalars(np.array(action[:6], dtype=np.float64)))
+            rr.log(f"{self.rerun_robot.name}/cmd/gripper", rr.Scalar(float(action[-1])))
+
+    
 # mock_xarm_env.py
 class MockXArmEnv:
     def __init__(self, camera_dict=None):
@@ -348,7 +322,6 @@ class MockXArmEnv:
         for name in self.camera_dict:
             obs[f"{name}_rgb"] = np.random.randint(0, 256, size=(480, 640, 3), dtype=np.uint8)
             obs[f"{name}_depth"] = np.random.rand(480, 640).astype(np.float32)
-
         return obs
 
     def get_frames(self):
