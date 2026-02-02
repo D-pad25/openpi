@@ -4,8 +4,14 @@ Async JSON line protocol server bridging TCP <-> ROS gripper topics.
 
 Commands (newline-delimited JSON):
   {"cmd":"SET","value":0.0..1.0}  -> publishes Int16 [0..255] to /gripper_command
-  {"cmd":"GET"}                   -> returns latest measured position (0..1)
+  {"cmd":"GET"}                   -> returns latest measured position (0..1) + validity flag
   {"cmd":"PING"}                  -> health check
+
+Key fixes vs previous version:
+- Do NOT close the TCP connection on idle timeout (first-run inference can pause >15s).
+- GET never returns position=None (avoids float(None) parsing in client); includes position_valid flag.
+- ROS callback writes latest position under lock (thread-safe).
+- Optional: idle_timeout<=0 disables timeout entirely.
 """
 
 import asyncio
@@ -13,34 +19,42 @@ import json
 import argparse
 import threading
 import time
+
 import rospy
 from std_msgs.msg import Int16, Float32
 
 
 def clamp01(x: float) -> float:
     x = float(x)
-    if x < 0.0: return 0.0
-    if x > 1.0: return 1.0
+    if x < 0.0:
+        return 0.0
+    if x > 1.0:
+        return 1.0
     return x
 
 
 class GripperSocketServerAsync:
-    def __init__(self, host: str, port: int, idle_timeout: float = 15.0,
-                 topic_cmd: str = "/gripper_command",
-                 topic_cmd_norm: str = "/gripper_command_norm",
-                 topic_pos: str = "/gripper_position"):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        idle_timeout: float = 15.0,
+        topic_cmd: str = "/gripper_command",
+        topic_cmd_norm: str = "/gripper_command_norm",
+        topic_pos: str = "/gripper_position",
+    ):
         self.host = host
         self.port = port
         self.idle_timeout = idle_timeout
 
         # ROS pubs/subs
-        self._pub_cmd = rospy.Publisher(topic_cmd, Int16, queue_size=1)        # command 0..255
+        self._pub_cmd = rospy.Publisher(topic_cmd, Int16, queue_size=1)  # command 0..255
         self._pub_cmd_norm = rospy.Publisher(topic_cmd_norm, Float32, queue_size=1)  # command 0..1 (debug)
         self._topic_cmd = topic_cmd
 
         self._pos_lock = threading.Lock()
-        self._latest_pos_norm = None  # Float in [0..1], measured
-        self._last_cmd_norm = None    # Float in [0..1], commanded
+        self._latest_pos_norm = None  # Float in [0..1], measured (may be None until first message)
+        self._last_cmd_norm = None    # Float in [0..1], last commanded
 
         rospy.Subscriber(topic_pos, Float32, self._gripper_cb)
 
@@ -62,14 +76,18 @@ class GripperSocketServerAsync:
                 return True
             time.sleep(0.05)
         if not self._waited_once:
-            rospy.logwarn(f"[ROS] No subscribers on {self._topic_cmd} after {timeout_s:.1f}s; commands may be dropped.")
+            rospy.logwarn(
+                f"[ROS] No subscribers on {self._topic_cmd} after {timeout_s:.1f}s; commands may be dropped."
+            )
             self._waited_once = True
         return False
 
     # -------------------- ROS callback --------------------
     def _gripper_cb(self, msg: Float32):
-        norm = float(msg.data) / 255.0
-        self._latest_pos_norm = clamp01(norm)
+        # Thread-safe update under lock
+        norm = clamp01(float(msg.data) / 255.0)
+        with self._pos_lock:
+            self._latest_pos_norm = norm
 
     # -------------------- TCP handling --------------------
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
@@ -78,16 +96,26 @@ class GripperSocketServerAsync:
         try:
             while not rospy.is_shutdown():
                 try:
-                    line = await asyncio.wait_for(reader.readline(), timeout=self.idle_timeout)
+                    if self.idle_timeout and self.idle_timeout > 0:
+                        line = await asyncio.wait_for(reader.readline(), timeout=self.idle_timeout)
+                    else:
+                        line = await reader.readline()
+
                 except asyncio.TimeoutError:
-                    print(f"[⏱] Idle timeout from {addr}; closing.")
-                    break
+                    # IMPORTANT: Don't close on idle.
+                    # Policy inference can have long gaps (especially first run / cold start).
+                    continue
+
                 if not line:
                     break
 
                 reply = self._dispatch_line(line)
-                writer.write((json.dumps(reply, separators=(',', ':')) + "\n").encode())
-                await writer.drain()
+
+                try:
+                    writer.write((json.dumps(reply, separators=(",", ":")) + "\n").encode())
+                    await writer.drain()
+                except (BrokenPipeError, ConnectionResetError):
+                    break
 
         except Exception as e:
             print(f"[⚠️] Client error {addr}: {e}")
@@ -119,10 +147,18 @@ class GripperSocketServerAsync:
             with self._pos_lock:
                 pos = self._latest_pos_norm
                 last_cmd = self._last_cmd_norm
+
+            pos_valid = (pos is not None)
+
+            # IMPORTANT: Never return position=None; provide numeric fallback
+            if not pos_valid:
+                pos = last_cmd if last_cmd is not None else 0.0
+
             return {
                 "ok": True,
                 "cmd": "GET",
-                "position": pos if pos is not None else None,
+                "position": float(pos),
+                "position_valid": pos_valid,  # NEW: indicates whether position is measured
                 "last_cmd": last_cmd,
                 "units": "0..1",
                 "timestamp": rospy.get_time(),
@@ -138,13 +174,18 @@ class GripperSocketServerAsync:
         self._wait_for_subscribers(timeout_s=3.0)
 
         int_val = int(round(value_norm * 255))
+
         # Publish both raw int command and normalized debug
         self._pub_cmd.publish(Int16(data=int_val))
         self._pub_cmd_norm.publish(Float32(data=value_norm))
+
         with self._pos_lock:
             self._last_cmd_norm = value_norm
 
-        rospy.loginfo(f"[➡️ SET] norm={value_norm:.3f} -> int16={int_val} (subs={self._pub_cmd.get_num_connections()})")
+        rospy.loginfo(
+            f"[➡️ SET] norm={value_norm:.3f} -> int16={int_val} (subs={self._pub_cmd.get_num_connections()})"
+        )
+
         return {
             "ok": True,
             "cmd": "SET",
@@ -156,7 +197,7 @@ class GripperSocketServerAsync:
     # -------------------- server lifecycle --------------------
     async def start(self):
         server = await asyncio.start_server(self._handle_client, self.host, self.port)
-        print(f"[🔌] Gripper Async Server running on {self.host}:{self.port}")
+        print(f"[🔌] Gripper Async Server running on {self.host}:{self.port} (idle_timeout={self.idle_timeout})")
         async with server:
             await server.serve_forever()
 
@@ -165,7 +206,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=22345)
-    parser.add_argument("--idle-timeout", type=float, default=15.0)
+    parser.add_argument(
+        "--idle-timeout",
+        type=float,
+        default=120.0,  # Increased default to handle first-run cold-start inference delays.
+        help="Seconds to wait for a line before continuing to wait. <=0 disables timeout.",
+    )
     parser.add_argument("--topic-cmd", default="/gripper_command")
     parser.add_argument("--topic-cmd-norm", default="/gripper_command_norm")
     parser.add_argument("--topic-pos", default="/gripper_position")
@@ -173,10 +219,15 @@ def main():
 
     rospy.init_node("gripper_socket_server_async", anonymous=True, disable_signals=True)
 
-    srv = GripperSocketServerAsync(args.host, args.port, args.idle_timeout,
-                                   topic_cmd=args.topic_cmd,
-                                   topic_cmd_norm=args.topic_cmd_norm,
-                                   topic_pos=args.topic_pos)
+    srv = GripperSocketServerAsync(
+        args.host,
+        args.port,
+        args.idle_timeout,
+        topic_cmd=args.topic_cmd,
+        topic_cmd_norm=args.topic_cmd_norm,
+        topic_pos=args.topic_pos,
+    )
+
     try:
         asyncio.run(srv.start())
     except KeyboardInterrupt:
