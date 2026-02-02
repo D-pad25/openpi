@@ -256,7 +256,8 @@ def main(
                     raise
 
             action = action_chunk[actions_from_chunk_completed]
-            rr.log(f"/xarm6/joint_positions", action[:6])
+            if use_rerun:
+                env.rerun_robot.log_robot_state(action[:6])
             actions_from_chunk_completed += 1
 
             # Convert joint positions and compute delta (in degrees)
