@@ -573,8 +573,8 @@ def _stop_local_policy_server() -> tuple[bool, str]:
 # ============================================================
 
 # Keep your WSL-host bridge addresses (your newer setup)
-base_camera = ZmqCameraBackend(host="127.0.0.1", port=5000, img_size=None, name="base", target_fps=15.0)
-wrist_camera = ZmqCameraBackend(host="127.0.0.1", port=5001, img_size=None, name="wrist", target_fps=15.0)
+wrist_camera = ZmqCameraBackend(host="127.0.0.1", port=5000, img_size=None, name="base", target_fps=15.0)
+base_camera = ZmqCameraBackend(host="127.0.0.1", port=5001, img_size=None, name="wrist", target_fps=15.0)
 
 # ============================================================
 # HTML Frontend
