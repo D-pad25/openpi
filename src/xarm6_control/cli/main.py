@@ -148,6 +148,7 @@ def main(
     gripper_host: str = "127.0.0.1",  # Host for ROS mode TCP server
     gripper_port: int = 22345,  # Port for ROS mode TCP server
     action_dim: int = 25, #25 Hz normal
+    use_rerun: bool = False,
 ):
     # Create a log directory if it doesn't exist
     if save:
@@ -177,6 +178,7 @@ def main(
             gripper_usb_port=gripper_usb_port,
             gripper_host=gripper_host,
             gripper_port=gripper_port,
+            use_rerun=use_rerun,
         )
     print("Attempting to connect to server...")
     sys.stdout.flush()  # Ensure output is visible immediately
