@@ -12,9 +12,6 @@ import asyncio
 import json
 from xarm6_control.hardware.gripper.client_async import GripperClient
 from xarm6_control.hardware.gripper.dynamixel_usb import GripperUSBClient
-import rerun as rr
-import roboticstoolbox as rtb
-from xarm6_control.scripts.rerun_helper import ReRunRobot
 
 class XArmRealEnv:
     def __init__(
@@ -69,6 +66,9 @@ class XArmRealEnv:
         self._last_action = None
 
         if self.use_rerun:
+            import rerun as rr
+            import roboticstoolbox as rtb
+            from xarm6_control.scripts.rerun_helper import ReRunRobot   
             self._rr_step = 0
             self._rr_robot = rtb.robot.ERobot.URDF(
                 "/home/qcrvgs/diffusion_pytorch/asset/xarm6.urdf"

@@ -20,7 +20,6 @@ from xarm6_control.sensors.transforms.resize_pkl import resize_with_pad_custom
 import datetime
 import os
 import csv
-import rerun as rr
 
 class MockCamera:
     def read(self, img_size=None):
@@ -155,7 +154,8 @@ def main(
         log_dir = os.path.join(log_dir, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
         os.makedirs(log_dir, exist_ok=True)
         print(f"Log directory created at: {log_dir}")
-
+    if use_rerun:
+        import rerun as rr
     # Create camera clients
     camera_clients = {}
 
