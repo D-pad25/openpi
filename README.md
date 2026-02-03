@@ -45,7 +45,13 @@ NOTE: `GIT_LFS_SKIP_SMUDGE=1` is needed to pull LeRobot as a dependency.
 
 **Docker**: As an alternative to uv installation, we provide instructions for installing openpi using Docker. If you encounter issues with your system setup, consider using Docker to simplify installation. See [Docker Setup](docs/docker.md) for more details.
 
+## xArm6 / VGS Overview
 
+All xArm6 and VGS-specific control code lives under:
+```
+src/xarm6_control/
+```
+This includes the dashboard app, xArm client, ZMQ camera pipeline, gripper control, and real-robot environment wrappers. See [`src/xarm6_control/README.md`](src/xarm6_control/README.md) for full setup and usage details.
 
 
 ## Model Checkpoints
